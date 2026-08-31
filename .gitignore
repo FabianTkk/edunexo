@@ -1,4 +1,34 @@
-"vendor/" 
-".env" 
-".idea/" 
-".vscode/" 
+# Dependencias
+vendor/
+
+# Variables de entorno y configuracion sensible
+.env
+.env.local
+.env.*.local
+
+# Archivos de prueba y temporales
+qr.php
+temp_fetch_user.php
+temp_update_password.php
+public/temp_update_password.php
+test_whatsapp.php
+gemini-code-1787608108509.sql
+
+# IDEs
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Cache
+*.cache
+cache/
