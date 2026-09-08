@@ -19,6 +19,11 @@ spl_autoload_register(function ($class) {
 $url    = isset($_GET['url']) ? trim($_GET['url'], '/') : '';
 $method = $_SERVER['REQUEST_METHOD'];
 
+// Detectar peticion AJAX del SPA router
+// Los layouts lo usan para saber si renderizar el shell completo
+define('IS_AJAX', isset($_SERVER['HTTP_X_REQUESTED_WITH'])
+    && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
+
 switch ($url) {
 
     case '':
@@ -147,6 +152,7 @@ switch ($url) {
         (new \App\Controllers\DocenteNotasController())->index(); break;
     case 'docente/notas/store':
         (new \App\Controllers\DocenteNotasController())->bulkStore(); break;
+
     // ── CronJobs ──────────────────────────────────────────────────────────
     case 'cron/procesar-envios':
         (new \App\Controllers\CronController())->procesarEnviosSemanales(); break;
@@ -154,7 +160,7 @@ switch ($url) {
     // ── 404 ───────────────────────────────────────────────────────────────
     default:
         http_response_code(404);
-        echo '<h1 style="font-family:sans-serif;text-align:center;margin-top:4rem;color:#888">404 — Pagina no encontrada</h1>';
+        echo '<div id="page-content"><h1 style="font-family:sans-serif;text-align:center;margin-top:4rem;color:#888">404 — Pagina no encontrada</h1></div>';
         break;
 }
 ?>
