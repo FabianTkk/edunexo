@@ -28,7 +28,7 @@ require __DIR__ . '/../layouts/admin_header.php';
     <?php endif; ?>
 
     <!-- STEP 1: Seleccionar Curso -->
-    <div class="card shadow-sm mb-4 border-primary border-opacity-50">
+    <div class="card bs-card shadow-sm mb-4 border-primary border-opacity-50">
         <div class="card-body">
             <label class="form-label text-light fw-bold">1. Seleccionar Curso</label>
             <select class="form-select form-select-lg bg-dark text-light border-secondary" id="selectCurso" onchange="mostrarCurso(this.value)">
@@ -48,7 +48,7 @@ require __DIR__ . '/../layouts/admin_header.php';
                 <div class="row g-4">
                     <!-- ASIGNACION MASIVA -->
                     <div class="col-md-4">
-                        <div class="card shadow-sm h-100">
+                        <div class="card bs-card shadow-sm h-100">
                             <div class="card-header border-bottom border-secondary border-opacity-25 bg-transparent pt-3 pb-2">
                                 <h6 class="mb-0 text-warning"><i class="bi bi-lightning-fill me-1"></i> Asignación Masiva</h6>
                             </div>
@@ -76,13 +76,13 @@ require __DIR__ . '/../layouts/admin_header.php';
 
                     <!-- ASIGNACION INDIVIDUAL (Tabla) -->
                     <div class="col-md-8">
-                        <div class="card shadow-sm h-100">
+                        <div class="card bs-card shadow-sm h-100">
                             <div class="card-header border-bottom border-secondary border-opacity-25 bg-transparent pt-3 pb-2">
                                 <h6 class="mb-0 text-info"><i class="bi bi-list-task me-1"></i> Asignación por Materia</h6>
                             </div>
                             <div class="card-body p-0">
                                 <div class="table-responsive">
-                                    <table class="table table-hover mb-0">
+                                    <table class="table bs-table table-hover mb-0">
                                         <thead>
                                             <tr>
                                                 <th class="ps-4">Materia</th>

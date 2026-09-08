@@ -485,6 +485,32 @@ body {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+/* Custom scrollbar para sidebar */
+.sidebar-nav::-webkit-scrollbar {
+    width: 5px;
+}
+
+.sidebar-nav::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+    background: rgba(99, 120, 255, 0.25);
+    border-radius: 999px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb:hover {
+    background: rgba(99, 120, 255, 0.45);
+}
+
+/* Firefox scrollbar */
+.sidebar-nav {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(99, 120, 255, 0.25) transparent;
 }
 
 .nav-section-label {

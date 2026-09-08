@@ -28,10 +28,10 @@ require __DIR__ . '/../layouts/admin_header.php';
         <?php unset($_SESSION['error']); ?>
     <?php endif; ?>
 
-    <div class="card shadow-sm">
+    <div class="card bs-card shadow-sm">
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
+                <table class="table bs-table table-hover mb-0">
                     <thead>
                         <tr>
                             <th class="ps-4">Nombre</th>
