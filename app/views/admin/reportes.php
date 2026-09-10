@@ -1,39 +1,44 @@
 <?php $pageTitle = 'Reportes'; require __DIR__ . '/../layouts/admin_header.php'; ?>
 
-<div class="container-fluid py-4">
-    <div class="mb-4">
-        <h2 class="fw-bold mb-1">Todos los Reportes</h2>
-        <p class="text-muted mb-0">Selecciona un curso para ver los reportes, o busca por CI del alumno.</p>
+<div style="margin-bottom: 2rem; padding-top: 1rem;">
+    <div style="margin-bottom: 1.5rem;">
+        <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0 0 0.5rem 0;">Todos los Reportes</h2>
+        <p style="color: var(--text-muted); margin: 0;">Selecciona un curso para ver los reportes, o busca por CI del alumno.</p>
     </div>
 
     <!-- Busqueda por CI -->
-    <div class="card bs-card rounded-4 shadow-sm mb-4">
-        <div class="card-body">
-            <form method="GET" action="/edunexo/admin/reportes/ci" class="d-flex gap-2">
-                <input type="text" name="ci" class="form-control bg-dark text-light border-secondary" placeholder="Buscar por CI del alumno..." value="<?= htmlspecialchars($_GET['ci'] ?? '') ?>">
-                <button type="submit" class="btn btn-outline-primary px-4"><i class="bi bi-search me-1"></i> Buscar</button>
-            </form>
-        </div>
+    <div class="data-card" style="margin-bottom: 2rem;">
+        <form method="GET" action="/edunexo/admin/reportes/ci" style="display: flex; gap: 0.5rem; margin: 0;">
+            <div class="form-input-wrap" style="flex: 1; margin: 0;">
+                <i class="bi bi-search form-input-icon"></i>
+                <input type="text" name="ci" class="form-input" style="margin: 0;" placeholder="Buscar por CI del alumno..." value="<?= htmlspecialchars($_GET['ci'] ?? '') ?>">
+            </div>
+            <button type="submit" class="btn-primary" style="width: auto; margin: 0; padding: 0 1.5rem;">
+                Buscar
+            </button>
+        </form>
     </div>
 
     <!-- Cards por curso -->
-    <h5 class="text-secondary mb-3 fw-semibold">Reportes por Curso</h5>
+    <h5 style="color: var(--text-muted); font-size: 1.1rem; font-weight: 600; margin-bottom: 1rem;">Reportes por Curso</h5>
+    
     <?php if (empty($cursos)): ?>
-        <div class="text-center py-5 text-muted">No hay cursos activos con reportes.</div>
+        <div style="text-align: center; padding: 3rem 0; color: var(--text-muted);">No hay cursos activos con reportes.</div>
     <?php else: ?>
-    <div class="row g-3">
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1rem;">
         <?php foreach ($cursos as $c): ?>
-        <div class="col-md-4 col-lg-3">
-            <a href="/edunexo/admin/reportes/curso?curso_id=<?= $c['id'] ?>" class="text-decoration-none">
-                <div class="card bs-card rounded-4 h-100 p-3" style="transition:.2s;cursor:pointer;" onmouseover="this.style.borderColor='rgba(99,120,255,.5)'" onmouseout="this.style.borderColor='rgba(255,255,255,.1)'">
-                    <div class="d-flex justify-content-between align-items-start mb-2">
-                        <span class="badge bg-primary bg-opacity-25 text-info"><?= htmlspecialchars($c['turno']) ?></span>
-                        <span class="badge bg-success bg-opacity-25 text-success"><?= $c['total_reportes'] ?> reportes</span>
-                    </div>
-                    <h5 class="fw-bold text-light mb-0"><?= htmlspecialchars($c['nombre']) ?></h5>
+        <a href="/edunexo/admin/reportes/curso?curso_id=<?= $c['id'] ?>" style="text-decoration: none; display: block;">
+            <div class="data-card" style="height: 100%; transition: 0.2s; cursor: pointer; display: flex; flex-direction: column;" 
+                 onmouseover="this.style.borderColor='rgba(99,120,255,0.5)'" 
+                 onmouseout="this.style.borderColor='rgba(255,255,255,0.1)'">
+                
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                    <span class="chip chip-docente"><?= htmlspecialchars($c['turno']) ?></span>
+                    <span class="chip chip-logrado"><?= $c['total_reportes'] ?> reportes</span>
                 </div>
-            </a>
-        </div>
+                <h5 style="font-weight: 700; color: var(--text-primary); margin: 0; font-size: 1.1rem;"><?= htmlspecialchars($c['nombre']) ?></h5>
+            </div>
+        </a>
         <?php endforeach; ?>
     </div>
     <?php endif; ?>
