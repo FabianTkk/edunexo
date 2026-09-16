@@ -206,6 +206,7 @@ CREATE TABLE IF NOT EXISTS `tutores` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nombre_completo` varchar(150) COLLATE utf8mb4_unicode_ci NOT NULL,
   `telefono` varchar(20) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `activo` tinyint(1) NOT NULL DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)

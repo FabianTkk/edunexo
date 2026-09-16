@@ -104,9 +104,9 @@ require __DIR__ . '/../layouts/admin_header.php';
                 <div class="form-group">
                     <label class="form-label">Turno</label>
                     <select class="form-input no-icon" name="turno" id="cursoTurno">
-                        <option value="Mañana">Mañana</option>
-                        <option value="Tarde">Tarde</option>
-                        <option value="Noche">Noche</option>
+                        <option value="manana">Mañana</option>
+                        <option value="tarde">Tarde</option>
+                        <option value="noche">Noche</option>
                     </select>
                 </div>
             </div>
@@ -140,7 +140,7 @@ require __DIR__ . '/../layouts/admin_header.php';
         title.textContent = 'Nuevo Curso';
         document.getElementById('cursoId').value = '';
         document.getElementById('cursoNombre').value = '';
-        document.getElementById('cursoTurno').value = 'Mañana';
+        document.getElementById('cursoTurno').value = 'manana';
     }
 
     function editCurso(id, nombre, turno) {

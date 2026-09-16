@@ -17,16 +17,22 @@ class AdminEstudiantesController {
         $db = Database::getConnection();
 
         $estudiantes = $db->query("
-            SELECT e.*, c.nombre AS curso_nombre, t.nombre_completo AS tutor_nombre
+            SELECT e.*, c.nombre AS curso_nombre, t.nombre_completo AS tutor_nombre, te.tutor_id
             FROM estudiantes e
             LEFT JOIN cursos c ON c.id = e.curso_id
-            LEFT JOIN tutores_estudiantes te ON te.estudiante_id = e.id
+            LEFT JOIN tutores_estudiantes te ON te.id = (
+                SELECT te2.id
+                FROM tutores_estudiantes te2
+                WHERE te2.estudiante_id = e.id
+                ORDER BY te2.id
+                LIMIT 1
+            )
             LEFT JOIN tutores t ON t.id = te.tutor_id
             ORDER BY e.nombre_completo
         ")->fetchAll();
 
         $cursos  = $db->query("SELECT * FROM cursos WHERE activo=1 ORDER BY nombre")->fetchAll();
-        $tutores = $db->query("SELECT * FROM tutores ORDER BY nombre_completo")->fetchAll();
+        $tutores = $db->query("SELECT * FROM tutores WHERE activo=1 ORDER BY nombre_completo")->fetchAll();
         $csrfToken = SecurityHelper::generateCsrfToken();
 
         require __DIR__ . '/../views/admin/estudiantes.php';

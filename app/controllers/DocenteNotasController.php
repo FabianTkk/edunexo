@@ -64,7 +64,8 @@ class DocenteNotasController {
         $eval_id = (int)($_POST['evaluacion_id'] ?? 0);
         $cmd_id = (int)($_POST['cmd_id'] ?? 0);
 
-        if (!SecurityHelper::validateCsrfToken($_POST['csrf_token'] ?? '') || !$this->getEvaluationWithAccess($eval_id)) {
+        $evaluacion = $this->getEvaluationWithAccess($eval_id);
+        if (!SecurityHelper::validateCsrfToken($_POST['csrf_token'] ?? '') || !$evaluacion) {
             $_SESSION['error'] = 'Acceso denegado o token CSRF inválido.';
             header("Location: /edunexo/docente/evaluaciones?cmd_id=$cmd_id");
             exit;
@@ -89,14 +90,28 @@ class DocenteNotasController {
             ");
 
             foreach ($notas as $est_id => $data) {
-                // If score is empty string, we can insert NULL instead if possible.
-                // HTML input number returns empty string if left blank.
+                $estudianteId = filter_var($est_id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+                if ($estudianteId === false || !is_array($data)) {
+                    throw new \InvalidArgumentException('Se recibieron datos de estudiante inválidos.');
+                }
+
+                $stmtEstudiante = $db->prepare(
+                    'SELECT id FROM estudiantes WHERE id = ? AND curso_id = ? AND estado = \'activo\''
+                );
+                $stmtEstudiante->execute([$estudianteId, $evaluacion['curso_id']]);
+                if (!$stmtEstudiante->fetch()) {
+                    throw new \InvalidArgumentException('Uno de los estudiantes no pertenece al curso de esta evaluación.');
+                }
+
                 $puntaje = trim($data['puntaje'] ?? '');
+                if ($puntaje !== '' && (!is_numeric($puntaje) || (float)$puntaje < 0 || (float)$puntaje > (float)$evaluacion['puntaje_maximo'])) {
+                    throw new \InvalidArgumentException('Cada puntaje debe estar entre 0 y el máximo de la evaluación.');
+                }
                 $puntaje_val = ($puntaje === '') ? null : (float)$puntaje;
                 
                 $obs = SecurityHelper::sanitize($data['observacion'] ?? '');
 
-                $stmt->execute([$eval_id, (int)$est_id, $puntaje_val, $obs]);
+                $stmt->execute([$eval_id, $estudianteId, $puntaje_val, $obs]);
             }
 
             $db->commit();

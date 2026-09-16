@@ -74,16 +74,23 @@ class CronController {
             $mensaje = "Hola {$envio['tutor_nombre']}, le enviamos el reporte semanal de {$envio['estudiante_nombre']} — semana del {$fechaInicio} al {$fechaFin}.\n\n";
 
             // ASISTENCIAS
-            $stmtAsist = $db->prepare("SELECT fecha FROM asistencias WHERE estudiante_id = ? AND presente = 0 AND fecha >= ? AND fecha <= ?");
+            $stmtAsist = $db->prepare("SELECT fecha, justificada FROM asistencias WHERE estudiante_id = ? AND presente = 0 AND fecha >= ? AND fecha <= ?");
             $stmtAsist->execute([$estudianteId, $periodoSemana, date('Y-m-d', strtotime($periodoSemana . ' + 4 days'))]);
             $ausencias = $stmtAsist->fetchAll();
+
+            $ausenciasNoJustificadas = array_filter($ausencias, fn($ausencia) => !(int)$ausencia['justificada']);
+            $ausenciasJustificadas = array_filter($ausencias, fn($ausencia) => (int)$ausencia['justificada']);
 
             if (empty($ausencias)) {
                 $mensaje .= "ASISTENCIA:\nAsistencia completa esta semana.\n\n";
             } else {
-                $mensaje .= "ASISTENCIA:\n- Dias ausente esta semana: " . count($ausencias) . "\n";
-                $fechas = array_map(function($a) { return date('d/m', strtotime($a['fecha'])); }, $ausencias);
-                $mensaje .= "- Fechas de ausencia: " . implode(', ', $fechas) . "\n\n";
+                $mensaje .= "ASISTENCIA:\n";
+                $mensaje .= "- Ausencias no justificadas: " . count($ausenciasNoJustificadas) . "\n";
+                if ($ausenciasNoJustificadas) {
+                    $fechas = array_map(fn($a) => date('d/m', strtotime($a['fecha'])), $ausenciasNoJustificadas);
+                    $mensaje .= "- Fechas de ausencia: " . implode(', ', $fechas) . "\n";
+                }
+                $mensaje .= "- Ausencias justificadas: " . count($ausenciasJustificadas) . "\n\n";
             }
 
             // CALIFICACIONES Y OBSERVACIONES

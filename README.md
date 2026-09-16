@@ -40,11 +40,9 @@ Abrir HeidiSQL (o cualquier cliente MySQL) y ejecutar los siguientes archivos en
 
 ```
 edunexo_completo.sql
-database/migration_modulos_nuevos.sql
-database/fix_alter_estudiantes.sql
 ```
 
-> La base de datos se llama `edunexo_db`. Se crea automaticamente al ejecutar el primer SQL.
+> La base de datos se llama `edunexo_db`. Se crea automáticamente al ejecutar el script.
 
 ### 3. Configurar la conexion a la base de datos
 

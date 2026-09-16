@@ -43,11 +43,12 @@
                         <th>Ausencias</th>
                         <th>Comportamiento</th>
                         <th>Docente</th>
+                        <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
                 <?php if (empty($reportes)): ?>
-                    <tr class="empty-row"><td colspan="6">No hay reportes para este filtro.</td></tr>
+                    <tr class="empty-row"><td colspan="7">No hay reportes para este filtro.</td></tr>
                 <?php else: foreach ($reportes as $r): ?>
                     <tr>
                         <td style="font-weight: 600; color: var(--text-primary);"><?= htmlspecialchars($r['nombre_completo']) ?></td>
@@ -62,6 +63,7 @@
                         </td>
                         <td><?= htmlspecialchars($r['comportamiento']) ?></td>
                         <td style="color: var(--text-muted);"><?= htmlspecialchars($r['docente_nombre'] ?? '—') ?></td>
+                        <td><a class="btn-secondary btn-sm" href="/edunexo/admin/reportes/gestionar?reporte_id=<?= (int)$r['id'] ?>">Gestionar</a></td>
                     </tr>
                 <?php endforeach; endif; ?>
                 </tbody>

@@ -1,36 +1,25 @@
 <?php
-// app/views/admin/asignaciones.php
-$pageTitle = 'Asignación Docentes';
+$pageTitle = 'Asignación de materias';
 require __DIR__ . '/../layouts/admin_header.php';
 ?>
 <style>.curso-section { display: none; }</style>
 
 <div style="margin-bottom: 2rem; padding-top: 1rem;">
     <div style="margin-bottom: 1.5rem;">
-        <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0 0 0.5rem 0;">Asignación de Docentes a Cursos</h2>
-        <p style="color: var(--text-muted); margin: 0;">Seleccioná un curso para asignar los docentes por materia o hacer una asignación masiva.</p>
+        <h2 style="font-size: 1.5rem; font-weight: 700; margin: 0 0 0.5rem;">Materias por curso</h2>
+        <p style="color: var(--text-muted); margin: 0;">Agregá sólo las materias que se dictan en cada curso y asignales un docente.</p>
     </div>
 
-    <?php if (isset($_SESSION['success'])): ?>
-        <div class="alert alert-success">
-            <i class="bi bi-check-circle-fill alert-icon"></i>
-            <span><?= htmlspecialchars($_SESSION['success']) ?></span>
-        </div>
-        <?php unset($_SESSION['success']); ?>
-    <?php endif; ?>
+    <?php foreach (['success' => 'alert-success', 'error' => 'alert-error'] as $tipo => $clase): ?>
+        <?php if (isset($_SESSION[$tipo])): ?>
+            <div class="alert <?= $clase ?>"><span><?= htmlspecialchars($_SESSION[$tipo]) ?></span></div>
+            <?php unset($_SESSION[$tipo]); ?>
+        <?php endif; ?>
+    <?php endforeach; ?>
 
-    <?php if (isset($_SESSION['error'])): ?>
-        <div class="alert alert-error">
-            <i class="bi bi-exclamation-triangle-fill alert-icon"></i>
-            <span><?= htmlspecialchars($_SESSION['error']) ?></span>
-        </div>
-        <?php unset($_SESSION['error']); ?>
-    <?php endif; ?>
-
-    <!-- STEP 1: Seleccionar Curso -->
     <div class="data-card" style="margin-bottom: 2rem; border: 1px solid rgba(99,120,255,0.3);">
-        <label class="form-label" style="font-weight: 600; font-size: 1.1rem; margin-bottom: 1rem;">1. Seleccionar Curso</label>
-        <select class="form-input no-icon" style="font-size: 1.1rem; padding: 0.75rem 1rem;" id="selectCurso" onchange="mostrarCurso(this.value)">
+        <label class="form-label" style="font-weight: 600; font-size: 1.1rem; margin-bottom: 1rem;">Seleccionar curso</label>
+        <select class="form-input no-icon" style="font-size: 1.1rem; padding: .75rem 1rem;" id="selectCurso" onchange="mostrarCurso(this.value)">
             <option value="">-- Elegir un curso --</option>
             <?php foreach ($cursos as $curso): ?>
                 <option value="<?= $curso['id'] ?>"><?= htmlspecialchars($curso['nombre'] . ' (' . $curso['turno'] . ')') ?></option>
@@ -38,115 +27,92 @@ require __DIR__ . '/../layouts/admin_header.php';
         </select>
     </div>
 
-    <!-- SECTIONS PARA CADA CURSO (Ocultas por defecto) -->
-    <div id="cursoPanels">
-        <?php foreach ($cursos as $curso): ?>
-            <div class="curso-section" id="curso-<?= $curso['id'] ?>">
-                
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
-                    <!-- ASIGNACION MASIVA -->
-                    <div>
-                        <div class="data-card h-100" style="padding: 0;">
-                            <div style="padding: 1rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                                <h6 style="margin: 0; color: #ffd97d; font-size: 1.1rem; font-weight: 600;">
-                                    <i class="bi bi-lightning-fill" style="margin-right: 0.5rem;"></i> Asignación Masiva
-                                </h6>
-                            </div>
-                            <div style="padding: 1.5rem;">
-                                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">Asignar un docente a <strong>todas las materias</strong> de este curso.</p>
-                                <form method="POST" action="/edunexo/admin/asignaciones/bulk">
-                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
-                                    <input type="hidden" name="curso_id" value="<?= $curso['id'] ?>">
-                                    
-                                    <div class="form-group">
-                                        <select name="docente_id" class="form-input no-icon" required>
-                                            <option value="">-- Seleccionar Docente --</option>
-                                            <?php foreach ($docentes as $docente): ?>
-                                                <option value="<?= $docente['id'] ?>"><?= htmlspecialchars($docente['nombre']) ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    </div>
-                                    <button type="submit" class="btn-primary" style="background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); width: 100%; margin-top: 0.5rem;" onclick="return confirm('¿Asignar a todas las materias del curso?')">
-                                        Asignar a Todas
-                                    </button>
-                                </form>
-                            </div>
+    <?php foreach ($cursos as $curso): ?>
+        <?php $asignacionesCurso = $asignaciones[$curso['id']] ?? []; ?>
+        <section class="curso-section" id="curso-<?= $curso['id'] ?>">
+            <div style="display:grid; grid-template-columns:minmax(280px, 1fr) minmax(420px, 2fr); gap:1.5rem;">
+                <div class="data-card" style="height:max-content;">
+                    <h3 style="font-size:1.1rem; margin-top:0;">Agregar materia</h3>
+                    <form method="POST" action="/edunexo/admin/asignaciones/single">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                        <input type="hidden" name="curso_id" value="<?= $curso['id'] ?>">
+                        <input type="hidden" name="cmd_id" value="0">
+                        <div class="form-group">
+                            <label class="form-label">Materia</label>
+                            <select name="materia_id" class="form-input no-icon" required>
+                                <option value="">-- Seleccionar materia --</option>
+                                <?php foreach ($materias as $materia): ?>
+                                    <?php if (!isset($asignacionesCurso[$materia['id']])): ?>
+                                        <option value="<?= $materia['id'] ?>"><?= htmlspecialchars($materia['nombre']) ?></option>
+                                    <?php endif; ?>
+                                <?php endforeach; ?>
+                            </select>
                         </div>
-                    </div>
+                        <div class="form-group">
+                            <label class="form-label">Docente</label>
+                            <select name="docente_id" class="form-input no-icon" required>
+                                <option value="">-- Seleccionar docente --</option>
+                                <?php foreach ($docentes as $docente): ?>
+                                    <option value="<?= $docente['id'] ?>"><?= htmlspecialchars($docente['nombre']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn-primary" style="width:100%;">Agregar materia</button>
+                    </form>
+                </div>
 
-                    <!-- ASIGNACION INDIVIDUAL (Tabla) -->
-                    <div style="grid-column: span 2 / span 2;">
-                        <div class="data-card h-100" style="padding: 0;">
-                            <div style="padding: 1rem 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                                <h6 style="margin: 0; color: #6378ff; font-size: 1.1rem; font-weight: 600;">
-                                    <i class="bi bi-list-task" style="margin-right: 0.5rem;"></i> Asignación por Materia
-                                </h6>
-                            </div>
-                            <div style="overflow-x:auto;">
-                                <table class="tbl">
-                                    <thead>
+                <div class="data-card" style="padding:0;">
+                    <div style="padding:1rem 1.5rem; border-bottom:1px solid rgba(255,255,255,.1);">
+                        <h3 style="font-size:1.1rem; margin:0;">Materias habilitadas</h3>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table class="tbl">
+                            <thead><tr><th>Materia</th><th>Docente</th><th style="text-align:right;">Acciones</th></tr></thead>
+                            <tbody>
+                                <?php if (empty($asignacionesCurso)): ?>
+                                    <tr><td colspan="3" class="empty-row">Este curso aún no tiene materias habilitadas.</td></tr>
+                                <?php else: ?>
+                                    <?php foreach ($asignacionesCurso as $asignacion): ?>
                                         <tr>
-                                            <th>Materia</th>
-                                            <th>Docente Asignado</th>
-                                            <th style="text-align: right;">Acción</th>
+                                            <td style="font-weight:600;"><?= htmlspecialchars($asignacion['materia_nombre']) ?></td>
+                                            <td>
+                                                <form method="POST" action="/edunexo/admin/asignaciones/single" style="display:flex; gap:.5rem; margin:0; align-items:center;">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                                    <input type="hidden" name="cmd_id" value="<?= $asignacion['id'] ?>">
+                                                    <input type="hidden" name="curso_id" value="<?= $curso['id'] ?>">
+                                                    <input type="hidden" name="materia_id" value="<?= $asignacion['materia_id'] ?>">
+                                                    <select name="docente_id" class="form-input no-icon" style="padding:.4rem .75rem; margin:0; min-width:180px;" required>
+                                                        <?php foreach ($docentes as $docente): ?>
+                                                            <option value="<?= $docente['id'] ?>" <?= $docente['id'] == $asignacion['docente_id'] ? 'selected' : '' ?>><?= htmlspecialchars($docente['nombre']) ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                    <button type="submit" class="btn-secondary btn-sm" title="Guardar docente">Guardar</button>
+                                                </form>
+                                            </td>
+                                            <td style="text-align:right;">
+                                                <form method="POST" action="/edunexo/admin/asignaciones/remove" style="margin:0;" onsubmit="return confirm('¿Quitar esta materia del curso? Se conservará el historial académico.')">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                                    <input type="hidden" name="cmd_id" value="<?= $asignacion['id'] ?>">
+                                                    <button type="submit" class="btn-secondary btn-sm" style="color:#ff8b8b;">Quitar</button>
+                                                </form>
+                                            </td>
                                         </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php foreach ($materias as $materia): 
-                                            $cmd = $asignaciones[$curso['id']][$materia['id']] ?? null;
-                                            $cmd_id = $cmd ? $cmd['id'] : 0;
-                                            $assigned_docente_id = $cmd ? $cmd['docente_id'] : 0;
-                                        ?>
-                                            <tr>
-                                                <td style="font-weight: 500; color: var(--text-primary);"><?= htmlspecialchars($materia['nombre']) ?></td>
-                                                <td>
-                                                    <form method="POST" action="/edunexo/admin/asignaciones/single" style="display: flex; gap: 0.5rem; margin: 0; align-items: center;">
-                                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
-                                                        <input type="hidden" name="cmd_id" value="<?= $cmd_id ?>">
-                                                        <input type="hidden" name="curso_id" value="<?= $curso['id'] ?>">
-                                                        <input type="hidden" name="materia_id" value="<?= $materia['id'] ?>">
-                                                        
-                                                        <select name="docente_id" class="form-input no-icon" style="padding: 0.4rem 0.75rem; min-width: 200px; margin-bottom: 0; flex: 1;" required>
-                                                            <option value="">-- Sin asignar --</option>
-                                                            <?php foreach ($docentes as $docente): ?>
-                                                                <option value="<?= $docente['id'] ?>" <?= ($docente['id'] == $assigned_docente_id) ? 'selected' : '' ?>>
-                                                                    <?= htmlspecialchars($docente['nombre']) ?>
-                                                                </option>
-                                                            <?php endforeach; ?>
-                                                        </select>
-                                                        
-                                                        <button type="submit" class="btn-secondary btn-sm" style="color: #879fff; border-color: rgba(99,120,255,0.3); margin-top: 0; white-space: nowrap;" title="Guardar cambios">
-                                                            Guardar
-                                                        </button>
-                                                    </form>
-                                                </td>
-                                                <td></td> <!-- Placeholder for grid alignment with form -->
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                                    <?php endforeach; ?>
+                                <?php endif; ?>
+                            </tbody>
+                        </table>
                     </div>
-                </div> <!-- row -->
-
+                </div>
             </div>
-        <?php endforeach; ?>
-    </div>
+        </section>
+    <?php endforeach; ?>
 </div>
 
 <script>
-    function mostrarCurso(cursoId) {
-        // Ocultar todos
-        document.querySelectorAll('.curso-section').forEach(el => {
-            el.style.display = 'none';
-        });
-        
-        // Mostrar el seleccionado
-        if (cursoId) {
-            const section = document.getElementById('curso-' + cursoId);
-            if (section) section.style.display = 'block';
-        }
-    }
+function mostrarCurso(cursoId) {
+    document.querySelectorAll('.curso-section').forEach(el => el.style.display = 'none');
+    const section = cursoId ? document.getElementById('curso-' + cursoId) : null;
+    if (section) section.style.display = 'block';
+}
 </script>
 <?php require __DIR__ . '/../layouts/admin_footer.php'; ?>

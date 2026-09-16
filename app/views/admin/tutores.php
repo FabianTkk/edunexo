@@ -27,6 +27,7 @@
                 <tr>
                     <th>Nombre</th>
                     <th>Telefono</th>
+                    <th>Estado</th>
                     <th>Estudiantes vinculados</th>
                     <th style="text-align: right;">Acciones</th>
                 </tr>
@@ -36,6 +37,11 @@
                 <tr>
                     <td style="font-weight: 600; color: var(--text-primary);"><?= htmlspecialchars($t['nombre_completo']) ?></td>
                     <td style="color: var(--text-muted);"><?= htmlspecialchars($t['telefono']) ?></td>
+                    <td>
+                        <span class="chip <?= $t['activo'] ? 'chip-logrado' : 'chip-no-log' ?>">
+                            <?= $t['activo'] ? 'Activo' : 'Inactivo' ?>
+                        </span>
+                    </td>
                     <td>
                         <?php if (empty($t['estudiantes'])): ?>
                             <span style="color: var(--text-muted); font-size: 0.8rem; font-style: italic;">Sin estudiantes</span>
@@ -52,6 +58,14 @@
                             onclick="editTutor(<?= $t['id'] ?>,'<?= addslashes($t['nombre_completo']) ?>','<?= addslashes($t['telefono']) ?>')">
                             <i class="bi bi-pencil"></i>
                         </button>
+                        <form method="POST" action="/edunexo/admin/tutores/toggle" style="display:inline; margin:0;">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                            <input type="hidden" name="id" value="<?= $t['id'] ?>">
+                            <button type="submit" class="btn-secondary btn-sm btn-icon"
+                                    title="<?= $t['activo'] ? 'Desactivar' : 'Activar' ?>">
+                                <i class="bi <?= $t['activo'] ? 'bi-pause-fill' : 'bi-play-fill' ?>"></i>
+                            </button>
+                        </form>
                     </td>
                 </tr>
             <?php endforeach; ?>

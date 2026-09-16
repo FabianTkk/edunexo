@@ -14,11 +14,8 @@ class DashboardController {
             exit;
         }
 
-        if (!SecurityHelper::checkSessionTimeout(30)) {
-            $_SESSION['error'] = 'Tu sesion expiro por inactividad. Por favor ingresa nuevamente.';
-            header('Location: /edunexo/login');
-            exit;
-        }
+        // El timeout de sesion se maneja centralizadamente en el router (index.php)
+        // para que aplique uniformemente a todos los modulos
 
         $nombre  = htmlspecialchars($_SESSION['nombre']  ?? 'Usuario', ENT_QUOTES, 'UTF-8');
         $usuario = htmlspecialchars($_SESSION['usuario'] ?? '',         ENT_QUOTES, 'UTF-8');
@@ -29,7 +26,6 @@ class DashboardController {
         $db = Database::getConnection();
 
         if ($rol === 'admin') {
-            // ── Estadisticas globales ──────────────────────────────────
             $stats = [];
 
             $stmt = $db->query('SELECT COUNT(*) FROM usuarios');
@@ -50,7 +46,6 @@ class DashboardController {
             $stmt = $db->query("SELECT COUNT(*) FROM envios_wa WHERE estado = 'enviado' OR estado = 'entregado'");
             $stats['envios_ok'] = (int)$stmt->fetchColumn();
 
-            // ── Usuarios recientes ─────────────────────────────────────
             $stmt = $db->query(
                 'SELECT id, nombre, username AS usuario, rol, created_at
                  FROM usuarios
@@ -59,7 +54,6 @@ class DashboardController {
             );
             $usuarios_recientes = $stmt->fetchAll();
 
-            // ── Reportes recientes ─────────────────────────────────────
             $stmt = $db->query(
                 'SELECT r.id, e.nombre_completo, e.curso, u.nombre AS docente,
                         r.calificacion_general, r.comportamiento, r.dias_ausente, r.periodo_semana
@@ -74,7 +68,6 @@ class DashboardController {
             require __DIR__ . '/../views/dashboard/admin.php';
 
         } elseif ($rol === 'docente') {
-            // ── Estadisticas del docente ───────────────────────────────
             $stats = [];
 
             $stmt = $db->prepare(
@@ -83,8 +76,17 @@ class DashboardController {
             $stmt->execute([':uid' => $userId]);
             $stats['mis_estudiantes'] = (int)$stmt->fetchColumn();
 
-            $stmt = $db->query("SELECT COUNT(*) FROM estudiantes WHERE estado = 'activo'");
-            $stats['total_estudiantes'] = (int)$stmt->fetchColumn();
+            // Solo alumnos de cursos y materias asignados al docente actual.
+            $stmt = $db->prepare(
+                "SELECT COUNT(DISTINCT e.id)
+                 FROM estudiantes e
+                 JOIN curso_materia_docente cmd ON cmd.curso_id = e.curso_id
+                 WHERE cmd.docente_id = :uid
+                   AND cmd.activo = 1
+                   AND e.estado = 'activo'"
+            );
+            $stmt->execute([':uid' => $userId]);
+            $stats['estudiantes_asignados'] = (int)$stmt->fetchColumn();
 
             $stmt = $db->prepare(
                 'SELECT COUNT(*) FROM reportes WHERE usuario_id = :uid'
@@ -100,7 +102,6 @@ class DashboardController {
             $stmt->execute([':uid' => $userId]);
             $stats['envios_ok'] = (int)$stmt->fetchColumn();
 
-            // ── Estudiantes con mas ausencias ──────────────────────────
             $stmt = $db->prepare(
                 'SELECT e.nombre_completo, e.curso,
                         SUM(r.dias_ausente) AS total_ausencias,
@@ -115,7 +116,6 @@ class DashboardController {
             $stmt->execute([':uid' => $userId]);
             $estudiantes_ausencias = $stmt->fetchAll();
 
-            // ── Ultimos reportes enviados ──────────────────────────────
             $stmt = $db->prepare(
                 'SELECT r.id, e.nombre_completo, e.curso, r.calificacion_general,
                         r.comportamiento, r.dias_ausente, r.periodo_semana,
@@ -129,7 +129,6 @@ class DashboardController {
             $stmt->execute([':uid' => $userId]);
             $mis_reportes = $stmt->fetchAll();
 
-            // ── Ultimos envios WhatsApp ────────────────────────────────
             $stmt = $db->prepare(
                 'SELECT wa.estado, wa.destinatario_telefono, wa.fecha_hora_envio,
                         e.nombre_completo

@@ -19,10 +19,38 @@ spl_autoload_register(function ($class) {
 $url    = isset($_GET['url']) ? trim($_GET['url'], '/') : '';
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Detectar peticion AJAX del SPA router
-// Los layouts lo usan para saber si renderizar el shell completo
 define('IS_AJAX', isset($_SERVER['HTTP_X_REQUESTED_WITH'])
     && strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest');
+
+// ── Rutas publicas ────────────────────────────────────────────────────────
+$rutasPublicas = ['', 'login', 'register', 'logout'];
+
+// ── Manejo centralizado de sesion ─────────────────────────────────────────
+if (!in_array($url, $rutasPublicas) && isset($_SESSION['user_id'])) {
+    $timeout = 120 * 60; // 2 horas
+
+    if (isset($_SESSION['last_activity'])) {
+        if ((time() - $_SESSION['last_activity']) > $timeout) {
+            session_unset();
+            session_destroy();
+            header('Location: /edunexo/login');
+            exit;
+        }
+    }
+    $_SESSION['last_activity'] = time();
+}
+
+// ── CSRF token global ─────────────────────────────────────────────────────
+// Se genera una sola vez aqui para que TODAS las vistas lo tengan
+// disponible sin depender de que el controlador lo genere
+if (isset($_SESSION['user_id'])) {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    $csrfToken = $_SESSION['csrf_token'];
+} else {
+    $csrfToken = '';
+}
 
 switch ($url) {
 
@@ -74,6 +102,8 @@ switch ($url) {
         (new \App\Controllers\AdminTutoresController())->store(); break;
     case 'admin/tutores/update':
         (new \App\Controllers\AdminTutoresController())->update(); break;
+    case 'admin/tutores/toggle':
+        (new \App\Controllers\AdminTutoresController())->toggle(); break;
 
     // ── Admin Cursos ──────────────────────────────────────────────────────
     case 'admin/cursos':
@@ -98,10 +128,10 @@ switch ($url) {
     // ── Admin Asignaciones ────────────────────────────────────────────────
     case 'admin/asignaciones':
         (new \App\Controllers\AdminAsignacionesController())->index(); break;
-    case 'admin/asignaciones/bulk':
-        (new \App\Controllers\AdminAsignacionesController())->bulk(); break;
     case 'admin/asignaciones/single':
         (new \App\Controllers\AdminAsignacionesController())->single(); break;
+    case 'admin/asignaciones/remove':
+        (new \App\Controllers\AdminAsignacionesController())->remove(); break;
 
     // ── Admin Tipos Evaluacion ────────────────────────────────────────────
     case 'admin/tipos_evaluacion':
@@ -120,6 +150,12 @@ switch ($url) {
         (new \App\Controllers\AdminReportesController())->porCurso(); break;
     case 'admin/reportes/ci':
         (new \App\Controllers\AdminReportesController())->porCI(); break;
+    case 'admin/reportes/gestionar':
+        (new \App\Controllers\AdminReportesController())->gestionar(); break;
+    case 'admin/reportes/actualizar':
+        (new \App\Controllers\AdminReportesController())->actualizar(); break;
+    case 'admin/reportes/eliminar':
+        (new \App\Controllers\AdminReportesController())->eliminar(); break;
 
     // ── Admin Envios WA ───────────────────────────────────────────────────
     case 'admin/envios-wa':
@@ -152,6 +188,28 @@ switch ($url) {
         (new \App\Controllers\DocenteNotasController())->index(); break;
     case 'docente/notas/store':
         (new \App\Controllers\DocenteNotasController())->bulkStore(); break;
+    case 'docente/estudiantes':
+        (new \App\Controllers\DocenteGestionController())->estudiantes(); break;
+    case 'docente/estudiantes/asistencia':
+        (new \App\Controllers\DocenteGestionController())->guardarAsistencia(); break;
+    case 'docente/reportes':
+        $ctrl = new \App\Controllers\DocenteGestionController();
+        if ($method !== 'POST') { $ctrl->reportes(); break; }
+        match ($_POST['accion'] ?? 'crear') {
+            'actualizar' => $ctrl->actualizarReporte(),
+            'eliminar' => $ctrl->eliminarReporte(),
+            'solicitar_cambio' => $ctrl->solicitarCambioReporte(),
+            default => $ctrl->guardarReporte(),
+        };
+        break;
+    case 'docente/envios-wa':
+        $ctrl = new \App\Controllers\DocenteGestionController(); $method === 'POST' ? $ctrl->prepararEnviosWhatsApp() : $ctrl->enviosWhatsApp(); break;
+    case 'docente/calendario':
+        (new \App\Controllers\DocenteGestionController())->calendario(); break;
+    case 'docente/mensajes':
+        $ctrl = new \App\Controllers\DocenteGestionController(); $method === 'POST' ? $ctrl->guardarMensaje() : $ctrl->mensajes(); break;
+    case 'docente/perfil':
+        $ctrl = new \App\Controllers\DocenteGestionController(); $method === 'POST' ? $ctrl->guardarPerfil() : $ctrl->perfil(); break;
 
     // ── CronJobs ──────────────────────────────────────────────────────────
     case 'cron/procesar-envios':

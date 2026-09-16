@@ -34,7 +34,12 @@ class AdminCursosController {
         }
 
         $nombre = SecurityHelper::sanitize($_POST['nombre'] ?? '');
-        $turno = SecurityHelper::sanitize($_POST['turno'] ?? 'Mañana');
+        $turno = $_POST['turno'] ?? 'manana';
+        if (!in_array($turno, ['manana', 'tarde', 'noche'], true)) {
+            $_SESSION['error'] = 'El turno seleccionado no es válido.';
+            header('Location: /edunexo/admin/cursos');
+            exit;
+        }
 
         if (empty($nombre)) {
             $_SESSION['error'] = 'El nombre del curso es obligatorio.';
@@ -78,7 +83,12 @@ class AdminCursosController {
 
         $id = (int)($_POST['id'] ?? 0);
         $nombre = SecurityHelper::sanitize($_POST['nombre'] ?? '');
-        $turno = SecurityHelper::sanitize($_POST['turno'] ?? 'Mañana');
+        $turno = $_POST['turno'] ?? 'manana';
+        if (!in_array($turno, ['manana', 'tarde', 'noche'], true)) {
+            $_SESSION['error'] = 'El turno seleccionado no es válido.';
+            header('Location: /edunexo/admin/cursos');
+            exit;
+        }
 
         if (empty($nombre) || $id === 0) {
             $_SESSION['error'] = 'Datos inválidos para actualizar.';

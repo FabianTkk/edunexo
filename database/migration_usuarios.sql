@@ -8,11 +8,12 @@ CREATE TABLE IF NOT EXISTS usuarios (
     id         INT AUTO_INCREMENT PRIMARY KEY,
     nombre     VARCHAR(100)  NOT NULL,
     email      VARCHAR(150)  UNIQUE DEFAULT NULL,
-    usuario    VARCHAR(80)   NOT NULL UNIQUE,
+    username   VARCHAR(50)   NOT NULL UNIQUE,
     password   VARCHAR(255)  NOT NULL,
-    rol        ENUM('admin','docente','alumno') NOT NULL DEFAULT 'alumno',
+    rol        ENUM('admin','docente') NOT NULL DEFAULT 'docente',
     activo     TINYINT(1)    NOT NULL DEFAULT 1,
-    created_at TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ───────────────────────────────────────────────────────────────────────────
@@ -33,7 +34,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- Crear usuario admin de prueba (contraseña: Admin123)
 -- IMPORTANTE: Cambiá la contraseña después del primer acceso
 -- ───────────────────────────────────────────────────────────────────────────
-INSERT IGNORE INTO usuarios (nombre, email, usuario, password, rol, activo)
+INSERT IGNORE INTO usuarios (nombre, email, username, password, rol, activo)
 VALUES (
     'Administrador',
     'admin@edunexo.local',

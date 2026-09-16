@@ -6,6 +6,15 @@
         <p style="color: var(--text-muted); margin: 0;">Selecciona un curso para ver los reportes, o busca por CI del alumno.</p>
     </div>
 
+    <?php if (!empty($solicitudesPendientes)): ?>
+    <div class="data-card" style="border-color:rgba(255,160,60,.4);">
+        <div class="data-card-header"><span class="data-card-title">Solicitudes de cambio pendientes</span><span class="chip chip-proceso"><?= count($solicitudesPendientes) ?> pendiente(s)</span></div>
+        <div style="overflow-x:auto"><table class="tbl"><thead><tr><th>Docente</th><th>Estudiante</th><th>Semana</th><th>Solicitud</th><th></th></tr></thead><tbody>
+        <?php foreach ($solicitudesPendientes as $s): ?><tr><td><?= htmlspecialchars($s['docente']) ?></td><td style="color:var(--text-primary);font-weight:600"><?= htmlspecialchars($s['estudiante']) ?></td><td><?= date('d/m/Y', strtotime($s['periodo_semana'])) ?></td><td><?= htmlspecialchars($s['motivo']) ?></td><td><a class="btn-secondary btn-sm" href="/edunexo/admin/reportes/gestionar?reporte_id=<?= (int)$s['reporte_id'] ?>&solicitud_id=<?= (int)$s['id'] ?>">Gestionar</a></td></tr><?php endforeach; ?>
+        </tbody></table></div>
+    </div>
+    <?php endif; ?>
+
     <!-- Busqueda por CI -->
     <div class="data-card" style="margin-bottom: 2rem;">
         <form method="GET" action="/edunexo/admin/reportes/ci" style="display: flex; gap: 0.5rem; margin: 0;">

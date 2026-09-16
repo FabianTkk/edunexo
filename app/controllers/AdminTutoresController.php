@@ -88,4 +88,30 @@ class AdminTutoresController {
         $_SESSION['success'] = 'Tutor actualizado correctamente.';
         header('Location: /edunexo/admin/tutores'); exit;
     }
+
+    public function toggle() {
+        if (!SecurityHelper::validateCsrfToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token CSRF invalido.';
+            header('Location: /edunexo/admin/tutores'); exit;
+        }
+
+        $id = (int)($_POST['id'] ?? 0);
+        if ($id === 0) {
+            $_SESSION['error'] = 'ID invalido.';
+            header('Location: /edunexo/admin/tutores'); exit;
+        }
+
+        $db = Database::getConnection();
+        $stmt = $db->prepare("SELECT activo FROM tutores WHERE id=?");
+        $stmt->execute([$id]);
+        $t = $stmt->fetch();
+        if ($t) {
+            $nuevo = $t['activo'] ? 0 : 1;
+            $db->prepare("UPDATE tutores SET activo=? WHERE id=?")->execute([$nuevo, $id]);
+            $_SESSION['success'] = 'Estado del tutor actualizado.';
+        } else {
+            $_SESSION['error'] = 'Tutor no encontrado.';
+        }
+        header('Location: /edunexo/admin/tutores'); exit;
+    }
 }

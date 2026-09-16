@@ -57,7 +57,7 @@
                     <td style="text-align: right;">
                         <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
                             <button class="btn-secondary btn-sm btn-icon" style="color: #879fff; border-color: rgba(99,120,255,0.3);"
-                                onclick="editEst(<?= $e['id'] ?>,'<?= addslashes($e['ci']) ?>','<?= addslashes($e['nombre_completo']) ?>',<?= $e['curso_id'] ?? 0 ?>)">
+                                onclick="editEst(<?= $e['id'] ?>,'<?= addslashes($e['ci']) ?>','<?= addslashes($e['nombre_completo']) ?>',<?= $e['curso_id'] ?? 0 ?>,<?= $e['tutor_id'] ?? 0 ?>)">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <form method="POST" action="/edunexo/admin/estudiantes/toggle" style="margin:0;">
@@ -154,13 +154,14 @@ function resetForm() {
     document.getElementById('eTutor').value = '0';
 }
 
-function editEst(id, ci, nombre, curso_id) {
+function editEst(id, ci, nombre, curso_id, tutor_id) {
     form.action = '/edunexo/admin/estudiantes/update';
     document.getElementById('modalTitle').textContent = 'Editar Estudiante';
     document.getElementById('eId').value = id;
     document.getElementById('eCi').value = ci;
     document.getElementById('eNombre').value = nombre;
     document.getElementById('eCurso').value = curso_id;
+    document.getElementById('eTutor').value = tutor_id || '0';
     openModal();
 }
 
