@@ -62,7 +62,15 @@ class DocenteGestionController {
         if(!SecurityHelper::validateCsrfToken($_POST['csrf_token']??'') || !preg_match('/^\d{4}-\d{2}-\d{2}$/',$fecha)) { $_SESSION['error']='Datos del reporte inválidos.'; $this->volver('docente/reportes'); }
         $db=Database::getConnection(); $ok=$db->prepare("SELECT 1 FROM estudiantes e JOIN curso_materia_docente cmd ON cmd.curso_id=e.curso_id WHERE e.id=? AND e.estado='activo' AND cmd.docente_id=? AND cmd.activo=1"); $ok->execute([$estId,$uid]); if(!$ok->fetch()) { $_SESSION['error']='No tenés acceso a ese estudiante.'; $this->volver('docente/reportes'); }
         $cal=in_array($_POST['calificacion_general']??'', ['Logrado','En Proceso','Aun no logrado','No evaluado'],true)?$_POST['calificacion_general']:'No evaluado'; $com=in_array($_POST['comportamiento']??'', ['Excelente','Bueno','Regular','Requiere Atencion'],true)?$_POST['comportamiento']:'Bueno';
-        $db->prepare("INSERT INTO reportes (estudiante_id,usuario_id,periodo_semana,calificacion_general,dias_ausente,tareas_incompletas,comportamiento,incidentes_disciplinarios) VALUES (?,?,?,?,?,?,?,?)")->execute([$estId,$uid,$fecha,$cal,max(0,(int)($_POST['dias_ausente']??0)),max(0,(int)($_POST['tareas_incompletas']??0)),$com,SecurityHelper::sanitize($_POST['incidentes']??'')]); $_SESSION['success']='Reporte creado.'; $this->volver('docente/reportes');
+        $db->prepare("INSERT INTO reportes (estudiante_id,usuario_id,periodo_semana,calificacion_general,dias_ausente,tareas_incompletas,comportamiento,incidentes_disciplinarios) VALUES (?,?,?,?,?,?,?,?)")->execute([$estId,$uid,$fecha,$cal,max(0,(int)($_POST['dias_ausente']??0)),max(0,(int)($_POST['tareas_incompletas']??0)),$com,SecurityHelper::sanitize($_POST['incidentes']??'')]);
+        $nuevoReporteId = (int)$db->lastInsertId();
+        if ($nuevoReporteId > 0) {
+            $stmtTutor = $db->prepare("SELECT t.telefono FROM tutores t JOIN tutores_estudiantes te ON te.tutor_id = t.id WHERE te.estudiante_id = ? AND t.activo = 1 LIMIT 1");
+            $stmtTutor->execute([$estId]);
+            $telTutor = $stmtTutor->fetchColumn() ?: '';
+            $db->prepare("INSERT INTO envios_wa (reporte_id, destinatario_telefono, estado, fecha_hora_envio) VALUES (?, ?, 'pendiente', NULL)")->execute([$nuevoReporteId, $telTutor]);
+        }
+        $_SESSION['success']='Reporte creado y preparado para envío por WhatsApp.'; $this->volver('docente/reportes');
     }
     public function actualizarReporte(): void {
         $uid=(int)$_SESSION['user_id']; $id=(int)($_POST['reporte_id']??0); $estId=(int)($_POST['estudiante_id']??0); $fecha=$_POST['periodo_semana']??'';

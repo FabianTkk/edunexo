@@ -72,19 +72,42 @@
         </form>
     </div>
 
-    <!-- Instrucciones Evolution API -->
-    <div class="data-card" style="max-width: 600px; margin-top: 0; border-color: hsla(350, 60%, 42%, 0.3);">
+    <!-- Estado en Vivo de Evolution API -->
+    <div class="data-card" style="max-width: 600px; margin-top: 1.5rem; border-color: <?= ($estadoEvolution['state'] ?? '') === 'open' ? 'rgba(34, 197, 94, 0.4)' : (($estadoEvolution['online'] ?? false) ? 'rgba(234, 179, 8, 0.4)' : 'rgba(239, 68, 68, 0.4)') ?>;">
         <div style="display: flex; align-items: flex-start; gap: 1rem;">
-            <div style="font-size: 1.8rem; flex-shrink: 0;">⚡</div>
-            <div>
-                <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 0 0 0.4rem 0;">
-                    Como iniciar Evolution API
-                </h3>
-                <p style="color: var(--text-muted); font-size: 0.875rem; margin: 0 0 0.75rem 0;">
-                    Para iniciar el servidor de WhatsApp, ejecuta el archivo
-                    <strong style="color: var(--accent);">iniciar-evolution.bat</strong>
-                    con doble click desde la carpeta de Evolution API.
-                </p>
+            <div style="font-size: 1.8rem; flex-shrink: 0;">
+                <?php if (($estadoEvolution['state'] ?? '') === 'open'): ?>
+                    🟢
+                <?php elseif (!empty($estadoEvolution['online'])): ?>
+                    🟡
+                <?php else: ?>
+                    🔴
+                <?php endif; ?>
+            </div>
+            <div style="flex: 1;">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.4rem;">
+                    <h3 style="font-size: 1rem; font-weight: 600; color: var(--text-primary); margin: 0;">
+                        Estado de Evolution API
+                    </h3>
+                    <span style="font-size: 0.78rem; font-weight: 600; padding: 0.2rem 0.6rem; border-radius: 9999px; <?= ($estadoEvolution['state'] ?? '') === 'open' ? 'background: rgba(34,197,94,0.15); color: #22c55e;' : ((!empty($estadoEvolution['online'])) ? 'background: rgba(234,179,8,0.15); color: #eab308;' : 'background: rgba(239,68,68,0.15); color: #ef4444;') ?>">
+                        <?= htmlspecialchars(strtoupper($estadoEvolution['state'] ?? 'DESCONECTADO')) ?>
+                    </span>
+                </div>
+
+                <?php if (($estadoEvolution['state'] ?? '') === 'open'): ?>
+                    <p style="color: var(--text-muted); font-size: 0.875rem; margin: 0 0 0.5rem 0;">
+                        El servicio está en ejecución y la instancia <strong style="color: var(--text-primary);"><?= htmlspecialchars($config['instancia_evolution'] ?? 'edunexo') ?></strong> está conectada y lista para enviar mensajes.
+                    </p>
+                <?php elseif (!empty($estadoEvolution['online'])): ?>
+                    <p style="color: var(--text-muted); font-size: 0.875rem; margin: 0 0 0.5rem 0;">
+                        Evolution API está corriendo en el puerto 8080, pero la sesión de WhatsApp no está abierta (estado actual: <code><?= htmlspecialchars($estadoEvolution['state'] ?? '') ?></code>).
+                    </p>
+                <?php else: ?>
+                    <p style="color: var(--text-muted); font-size: 0.875rem; margin: 0 0 0.5rem 0;">
+                        El servidor de Evolution API no está respondiendo en el puerto 8080.
+                    </p>
+                <?php endif; ?>
+
                 <div style="background: rgba(0,0,0,0.3); border-radius: 8px; padding: 0.6rem 1rem; font-size: 0.8rem; color: var(--text-secondary); font-family: monospace; word-break: break-all;">
                     <?= htmlspecialchars(($config['directorio_evolution'] ?? 'C:\laragon\www\evolution-api') . '\iniciar-evolution.bat') ?>
                 </div>

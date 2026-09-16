@@ -46,6 +46,11 @@ require __DIR__ . '/../layouts/docente_header.php';
                             <h4 class="card-title fw-bold mt-2 mb-1 text-light">
                                 <?= htmlspecialchars($asig['materia']) ?>
                             </h4>
+                            <?php if (!empty($asig['docente_nombre'])): ?>
+                                <div style="color: var(--accent); font-size: 0.85rem; margin-bottom: 0.3rem;">
+                                    <i class="bi bi-person-fill"></i> <?= htmlspecialchars($asig['docente_nombre']) ?>
+                                </div>
+                            <?php endif; ?>
                             <p class="card-text text-muted small mb-4">
                                 Gestion de evaluaciones y notas para este curso.
                             </p>

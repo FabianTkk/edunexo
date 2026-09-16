@@ -160,6 +160,12 @@ switch ($url) {
     // ── Admin Envios WA ───────────────────────────────────────────────────
     case 'admin/envios-wa':
         (new \App\Controllers\AdminEnviosWaController())->index(); break;
+    case 'admin/envios-wa/enviar':
+        (new \App\Controllers\AdminEnviosWaController())->enviarIndividual(); break;
+    case 'admin/envios-wa/procesar-pendientes':
+        (new \App\Controllers\AdminEnviosWaController())->procesarPendientes(); break;
+    case 'admin/envios-wa/test-directo':
+        (new \App\Controllers\AdminEnviosWaController())->testDirecto(); break;
 
     // ── Admin Logs ────────────────────────────────────────────────────────
     case 'admin/logs':

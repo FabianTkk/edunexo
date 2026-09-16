@@ -17,6 +17,7 @@ class AdminConfiguracionController {
         $db = Database::getConnection();
         $config = $db->query("SELECT * FROM configuracion WHERE id=1 LIMIT 1")->fetch();
         $csrfToken = SecurityHelper::generateCsrfToken();
+        $estadoEvolution = \App\Helpers\WhatsAppHelper::estadoInstancia();
         require __DIR__ . '/../views/admin/configuracion.php';
     }
 
