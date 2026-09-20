@@ -45,7 +45,9 @@ class CronController {
 
         $telefonoTutor = $envio['tutor_telefono'] ?? $envio['destinatario_telefono'];
         $estudianteId = $envio['estudiante_id'];
-        $periodoSemana = $envio['periodo_semana'];
+        // La semana siempre va de lunes a viernes; si el reporte se cargo con otra fecha, se lleva al lunes.
+        $periodoSemana = date('Y-m-d', strtotime('monday this week', strtotime($envio['periodo_semana'])));
+        $finSemana = date('Y-m-d', strtotime($periodoSemana . ' + 4 days'));
 
         // 3. Log de validación
         $valido = (!empty($telefonoTutor) && $telefonoTutor === $envio['destinatario_telefono']) ? 1 : 0;
@@ -74,23 +76,39 @@ class CronController {
         $mensaje = "Hola {$tutorNombre}, le enviamos el reporte semanal de {$envio['estudiante_nombre']} — semana del {$fechaInicio} al {$fechaFin}.\n\n";
 
         // ASISTENCIAS
-        $stmtAsist = $db->prepare("SELECT fecha, justificada FROM asistencias WHERE estudiante_id = ? AND presente = 0 AND fecha >= ? AND fecha <= ?");
-        $stmtAsist->execute([$estudianteId, $periodoSemana, date('Y-m-d', strtotime($periodoSemana . ' + 4 days'))]);
-        $ausencias = $stmtAsist->fetchAll();
+        // Se cuentan DIAS, no filas: un estudiante ausente en varias materias el mismo dia es una sola ausencia.
+        $stmtAsist = $db->prepare("SELECT fecha, presente, justificada FROM asistencias WHERE estudiante_id = ? AND fecha >= ? AND fecha <= ?");
+        $stmtAsist->execute([$estudianteId, $periodoSemana, $finSemana]);
+        $registrosAsistencia = $stmtAsist->fetchAll();
 
-        $ausenciasNoJustificadas = array_filter($ausencias, fn($ausencia) => !(int)$ausencia['justificada']);
-        $ausenciasJustificadas = array_filter($ausencias, fn($ausencia) => (int)$ausencia['justificada']);
+        $diasRegistrados = [];
+        $diasNoJustificados = [];
+        $diasJustificados = [];
+        foreach ($registrosAsistencia as $registro) {
+            $dia = $registro['fecha'];
+            $diasRegistrados[$dia] = true;
+            if ((int)$registro['presente'] === 0) {
+                if ((int)$registro['justificada']) $diasJustificados[$dia] = true;
+                else $diasNoJustificados[$dia] = true;
+            }
+        }
+        // Si en un mismo dia hay falta justificada y no justificada, cuenta como no justificada.
+        $diasJustificados = array_diff_key($diasJustificados, $diasNoJustificados);
 
-        if (empty($ausencias)) {
-            $mensaje .= "ASISTENCIA:\nAsistencia completa esta semana.\n\n";
+        $mensaje .= "ASISTENCIA:\n";
+        if (empty($diasRegistrados)) {
+            // Sin filas no significa asistencia perfecta: significa que el docente no registro nada.
+            $mensaje .= "Sin registro de asistencia esta semana.\n\n";
+        } elseif (empty($diasNoJustificados) && empty($diasJustificados)) {
+            $mensaje .= "Asistencia completa esta semana.\n\n";
         } else {
-            $mensaje .= "ASISTENCIA:\n";
-            $mensaje .= "- Ausencias no justificadas: " . count($ausenciasNoJustificadas) . "\n";
-            if ($ausenciasNoJustificadas) {
-                $fechas = array_map(fn($a) => date('d/m', strtotime($a['fecha'])), $ausenciasNoJustificadas);
+            $mensaje .= "- Ausencias no justificadas: " . count($diasNoJustificados) . "\n";
+            if ($diasNoJustificados) {
+                $fechas = array_map(fn($dia) => date('d/m', strtotime($dia)), array_keys($diasNoJustificados));
+                sort($fechas);
                 $mensaje .= "- Fechas de ausencia: " . implode(', ', $fechas) . "\n";
             }
-            $mensaje .= "- Ausencias justificadas: " . count($ausenciasJustificadas) . "\n\n";
+            $mensaje .= "- Ausencias justificadas: " . count($diasJustificados) . "\n\n";
         }
 
         // CALIFICACIONES Y OBSERVACIONES
@@ -103,7 +121,7 @@ class CronController {
             JOIN tipo_evaluacion te ON e.tipo_evaluacion_id = te.id
             WHERE n.estudiante_id = ? AND e.fecha >= ? AND e.fecha <= ?
         ");
-        $stmtNotas->execute([$estudianteId, $periodoSemana, date('Y-m-d', strtotime($periodoSemana . ' + 4 days'))]);
+        $stmtNotas->execute([$estudianteId, $periodoSemana, $finSemana]);
         $notas = $stmtNotas->fetchAll();
 
         $calificaciones = "";
@@ -134,7 +152,7 @@ class CronController {
             AND a.fecha_aviso >= ? AND a.fecha_aviso <= ?
             AND (a.aplica_a_todos = 1 OR ae.estudiante_id = ?)
         ");
-        $stmtAvisos->execute([$estudianteId, $periodoSemana, date('Y-m-d', strtotime($periodoSemana . ' + 4 days')), $estudianteId]);
+        $stmtAvisos->execute([$estudianteId, $periodoSemana, $finSemana, $estudianteId]);
         $avisos = $stmtAvisos->fetchAll();
 
         if (!empty($avisos)) {

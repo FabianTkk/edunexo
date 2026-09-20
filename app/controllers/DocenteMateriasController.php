@@ -24,7 +24,7 @@ class DocenteMateriasController {
                 JOIN cursos c ON c.id = cmd.curso_id 
                 JOIN materias m ON m.id = cmd.materia_id 
                 JOIN usuarios u ON u.id = cmd.docente_id
-                WHERE cmd.activo = 1 
+                WHERE cmd.activo = 1 AND c.activo = 1 AND m.activo = 1 
                 ORDER BY c.nombre, m.nombre
             ");
             $asignaciones = $stmt->fetchAll();
@@ -34,7 +34,7 @@ class DocenteMateriasController {
                 FROM curso_materia_docente cmd 
                 JOIN cursos c ON c.id = cmd.curso_id 
                 JOIN materias m ON m.id = cmd.materia_id 
-                WHERE cmd.docente_id = ? AND cmd.activo = 1 
+                WHERE cmd.docente_id = ? AND cmd.activo = 1 AND c.activo = 1 AND m.activo = 1 
                 ORDER BY c.nombre, m.nombre
             ");
             $stmt->execute([$docente_id]);
