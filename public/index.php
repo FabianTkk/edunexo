@@ -1,6 +1,11 @@
 <?php
 // public/index.php — Front Controller
 
+// Zona horaria unica del sistema (Paraguay: UTC-3 todo el anio, sin horario de verano desde octubre de 2024).
+// Database.php hace que MySQL use este mismo desfase. Si tu PHP tiene la base de zonas desactualizada y
+// date('P') no da -03:00 con America/Asuncion, usar 'Etc/GMT+3' (fijo, sin horario de verano).
+date_default_timezone_set('America/Asuncion');
+
 ini_set('session.cookie_httponly', 1);
 ini_set('session.cookie_samesite', 'Strict');
 ini_set('session.use_strict_mode', 1);

@@ -30,6 +30,9 @@ Archivos tocados: app/controllers/DocenteGestionController.php, CronController.p
 - [ ] Paso 1 (escapado doble): ejecutar la limpieza de datos viejos. Primero copia de la base: mysqldump -u root edunexo_db > backup_antes_de_limpiar.sql . Luego, en la carpeta del proyecto: php database/limpiar_entidades.php (solo muestra que cambiaria) y, si la lista se ve bien, php database/limpiar_entidades.php --apply
 - [ ] Paso 1: probar en el navegador (no se pudo automatizar): con un usuario, un tutor y un estudiante cuyo nombre tenga apostrofe o comillas (por ejemplo D'Angelo), abrir el boton de editar de cada pantalla admin y ver que el formulario muestre el nombre bien; y en Envios WhatsApp abrir "Ver detalle" de un reporte.
 
+- [ ] Paso 2 (zona horaria): verificar en tu PC que tu PHP conoce la regla actual de Paraguay. En la terminal de Laragon: php -r "date_default_timezone_set('America/Asuncion'); echo date('P T');"  Debe imprimir -03:00 -03. Si imprime -04:00 -04, tu base de zonas horarias de PHP esta vieja: en public/index.php cambiar 'America/Asuncion' por 'Etc/GMT+3' (fijo UTC-3).
+- [ ] Paso 2: probar en el navegador que "Mis reportes" muestre el boton Editar en un reporte recien creado, y que la columna "Creado" muestre la hora local correcta.
+
 ## 3. Pasos siguientes, en orden
 
 ### Paso 1 (HECHO en codigo; falta commit y limpieza de datos): escapado doble de SecurityHelper::sanitize()
@@ -52,7 +55,7 @@ Resultado (2026-09-20):
 - Regla desde ahora: todo texto de usuario se guarda crudo y se escapa SIEMPRE al imprimir (htmlspecialchars o SecurityHelper::e()); en onclick usar SecurityHelper::jsArg(); en innerHTML de JavaScript escapar con una funcion como escHtml().
 - Pruebas: 70 combinaciones (7 vistas por 10 textos hostiles) sin fallas, y contra las vistas viejas fallaban; edicion repetida 3 veces del mismo reporte deja el texto identico (antes crecia a &amp;amp;amp;#039;); limpieza con casos de 1 y 2 niveles y controles que no deben tocarse.
 
-### Paso 2 (SIGUIENTE): zona horaria
+### Paso 2 (HECHO en codigo; falta commit y verificar en tu PC): zona horaria
 
 Problema: public/index.php no fija la zona horaria de PHP. Si php.ini tiene UTC, despues de las 21:00 en Paraguay la fecha por defecto de la asistencia es la de manana. Ademas la ventana de 48 horas para editar reportes compara created_at de MySQL (zona de MySQL) con time() de PHP (zona de PHP); si no coinciden, la ventana se corre horas.
 
@@ -62,7 +65,14 @@ Plan:
 3. En app/config/Database.php ejecutar SET time_zone = '-03:00' al conectar (Paraguay usa UTC-3 todo el anio desde octubre de 2024; verificar que siga vigente al hacerlo).
 4. Prueba: cambiar la hora del sistema a las 22:00 y verificar la fecha por defecto de asistencia; crear un reporte y verificar que el boton editar/eliminar vence exactamente a las 48 horas.
 
-### Paso 3: tutor equivocado en el saludo y envios de WhatsApp
+Resultado (2026-09-20):
+- public/index.php fija date_default_timezone_set('America/Asuncion') antes de todo lo demas.
+- app/config/Database.php ejecuta SET time_zone con el mismo desfase que PHP al abrir cada conexion. Asi NOW() y CURRENT_TIMESTAMP de MySQL siempre coinciden con la hora de PHP, sin importar como este configurado el servidor MySQL. Todas las columnas de fecha-hora son TIMESTAMP (se guardan en UTC), por eso el cambio no altera ningun dato existente.
+- La regla de las 48 horas usaba dos relojes: MySQL (NOW()) para editar/eliminar y PHP (strtotime/time) para mostrar el boton. Ahora DocenteGestionController::reportes() calcula la columna editable en SQL y la vista docente/reportes.php la usa. Un solo reloj, sin depender de la zona.
+- Pruebas (con faketime y MySQL simulado en distintas zonas): a las 22:30 hora de Paraguay el sistema viejo proponia la fecha de manana en la asistencia y ahora propone la de hoy. Con MySQL en hora local y PHP en UTC, el boton Editar desaparecia 3 horas antes de vencer; con la configuracion inversa aparecia 3 horas despues y el clic daba error. Ahora coincide en ambos casos. Con MySQL en +09:00, NOW() ya coincide con PHP.
+- Regla desde ahora: cualquier script nuevo que se ejecute fuera de public/index.php (por ejemplo por linea de comandos o una tarea programada) debe llamar a date_default_timezone_set('America/Asuncion') antes de usar fechas o Database.
+
+### Paso 3 (SIGUIENTE): tutor equivocado en el saludo y envios de WhatsApp
 
 Problemas:
 - CronController arma el saludo con una consulta LEFT JOIN de tutores_estudiantes y tutores sin filtrar por el telefono del envio. Si un estudiante tiene dos tutores, el saludo puede nombrar a uno distinto del que recibe el mensaje.
@@ -106,6 +116,7 @@ Plan:
 - [ ] Anio lectivo: cursos y asistencias no tienen anio; el proximo anio se van a mezclar los datos.
 - [ ] DocenteMateriasController tiene una rama para admin que no se puede alcanzar, porque docente_header.php redirige a login a quien no sea docente. Quitar la rama o crear la vista admin.
 - [ ] Revisar si docente_header.php y docente_footer.php cargan Bootstrap JS dos veces.
+- [ ] public/migrate.php es un script de migracion dentro de la carpeta publica que ejecuta un ALTER TABLE sin pedir login. En su forma actual probablemente falla al abrirse (su require usa la ruta relativa app/Config/Database.php, que no existe desde public/), asi que hoy es un riesgo latente y no uno activo. Igual no debe estar en el repositorio: si alguien lo arregla, cualquiera que conozca la URL podria ejecutarlo. Borrarlo (git rm public/migrate.php); la migracion ya esta aplicada si la columna directorio_evolution existe en la tabla configuracion.
 - [ ] SecurityHelper::getClientIp() confia en el encabezado X-Forwarded-For, que el cliente puede falsificar. Quien lo cambie en cada intento evita el limite de intentos de login. Usar solo REMOTE_ADDR, salvo que haya un proxy confiable delante.
 - [ ] La sintaxis VALUES() en INSERT ... ON DUPLICATE KEY UPDATE esta marcada como obsoleta en MySQL 8.0.20 o superior. Funciona, pero conviene reemplazarla cuando se actualice el motor (MariaDB no acepta la sintaxis nueva, asi que revisar cual se usa en produccion).
 
@@ -124,3 +135,4 @@ Casos que hay que volver a comprobar despues de cada cambio:
 
 - 2026-09-20: fixes de asistencia, mensajes de WhatsApp y reportes semanales (seccion 1). Commit f33ca0e subido a GitHub.
 - 2026-09-20: paso 1 (escapado doble de sanitize) hecho en codigo y probado. Pendiente: commit, ejecutar limpiar_entidades.php sobre la base, probar los modales en el navegador. Siguiente: paso 2.
+- 2026-09-20: paso 2 (zona horaria) hecho en codigo y probado. Pendiente: commit, verificar la zona en tu PHP y probar Mis reportes en el navegador. Siguiente: paso 3.

@@ -16,6 +16,9 @@ class Database {
             ];
             try {
                 self::$pdo = new \PDO($dsn, $user, $pass, $options);
+                // MySQL usa el mismo desfase horario que PHP: NOW(), CURRENT_TIMESTAMP y las fechas que
+                // PHP lee con strtotime() coinciden sin importar la zona configurada en el servidor MySQL.
+                self::$pdo->exec("SET time_zone = '" . (new \DateTime('now'))->format('P') . "'");
             } catch (\PDOException $e) {
                 die('Database connection error: ' . $e->getMessage());
             }
