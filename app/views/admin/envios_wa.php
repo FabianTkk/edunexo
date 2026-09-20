@@ -197,7 +197,7 @@
                                 <!-- Ver detalle del reporte -->
                                 <button class="btn-secondary btn-sm btn-icon" style="color: var(--text-muted); border-color: rgba(255,255,255,0.1);"
                                     title="Ver Detalle del Reporte"
-                                    onclick="verDetalle('<?= addslashes($ev['estudiante']) ?>','<?= addslashes($ev['tutor'] ?? '—') ?>','<?= date('d/m/Y', strtotime($ev['periodo_semana'])) ?>','<?= (int)$ev['dias_ausente'] ?>','<?= addslashes($ev['calificacion_general'] ?? 'Logrado') ?>','<?= (int)($ev['tareas_incompletas'] ?? 0) ?>','<?= addslashes(str_replace(array("\r", "\n"), '', $ev['comportamiento'] ?? '')) ?>','<?= addslashes(str_replace(array("\r", "\n"), '', $ev['incidentes_disciplinarios'] ?? '')) ?>')">
+                                    onclick="verDetalle(<?= \App\Helpers\SecurityHelper::jsArg($ev['estudiante']) ?>,<?= \App\Helpers\SecurityHelper::jsArg($ev['tutor'] ?? '—') ?>,<?= \App\Helpers\SecurityHelper::jsArg(date('d/m/Y', strtotime($ev['periodo_semana']))) ?>,<?= (int)$ev['dias_ausente'] ?>,<?= \App\Helpers\SecurityHelper::jsArg($ev['calificacion_general'] ?? 'Logrado') ?>,<?= (int)($ev['tareas_incompletas'] ?? 0) ?>,<?= \App\Helpers\SecurityHelper::jsArg($ev['comportamiento'] ?? '') ?>,<?= \App\Helpers\SecurityHelper::jsArg($ev['incidentes_disciplinarios'] ?? '') ?>)">
                                     <i class="bi bi-eye"></i>
                                 </button>
                             </div>
@@ -285,7 +285,14 @@ document.querySelectorAll('.modal-overlay').forEach(modal => {
     });
 });
 
+// Escapa texto para insertarlo en innerHTML (los datos llegan crudos, sin escapar).
+function escHtml(valor) {
+    return String(valor ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
+}
+
 function verDetalle(estudiante, tutor, semana, ausencias, calificacion, tareas, comportamiento, incidentes) {
+    [estudiante, tutor, semana, ausencias, calificacion, tareas, comportamiento, incidentes] =
+        [estudiante, tutor, semana, ausencias, calificacion, tareas, comportamiento, incidentes].map(escHtml);
     document.getElementById('detalleBody').innerHTML = `
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
             <div>
@@ -327,7 +334,7 @@ function verDetalle(estudiante, tutor, semana, ausencias, calificacion, tareas, 
         ${incidentes ? `
         <div style="margin-bottom: 0;">
             <span style="color: var(--text-muted); display: block; font-size: 0.8rem; margin-bottom: 0.25rem;">Incidentes / Observaciones</span>
-            <div style="color: var(--text-primary); background: rgba(0,0,0,0.25); padding: 0.6rem 0.8rem; border-radius: 6px; font-size: 0.875rem;">
+            <div style="color: var(--text-primary); background: rgba(0,0,0,0.25); padding: 0.6rem 0.8rem; border-radius: 6px; font-size: 0.875rem; white-space: pre-wrap;">
                 ${incidentes}
             </div>
         </div>

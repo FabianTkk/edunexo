@@ -109,8 +109,28 @@ class SecurityHelper {
         return $errors;
     }
 
+    /**
+     * Limpia un texto de entrada para GUARDARLO: recorta espacios y quita caracteres de control.
+     * NO escapa HTML. El escapado se hace siempre al MOSTRAR (e() o htmlspecialchars), porque
+     * escapar al guardar rompe apostrofes/comillas/& al editar, en WhatsApp y en JavaScript.
+     */
     public static function sanitize(string $input): string {
-        return htmlspecialchars(strip_tags(trim($input)), ENT_QUOTES, 'UTF-8');
+        return preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', '', trim($input)) ?? '';
+    }
+
+    /** Escapa un valor para imprimirlo en HTML (texto o atributos). */
+    public static function e($valor): string {
+        return htmlspecialchars((string)$valor, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    /**
+     * Valor listo para usar como argumento de JavaScript dentro de un atributo HTML:
+     * onclick="editar(<?= SecurityHelper::jsArg($nombre) ?>)". Sirve para comillas, apostrofes,
+     * barras invertidas, saltos de linea y </script>.
+     */
+    public static function jsArg($valor): string {
+        $json = json_encode((string)$valor, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE);
+        return htmlspecialchars($json === false ? '""' : $json, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
     private static function getClientIp(): string {

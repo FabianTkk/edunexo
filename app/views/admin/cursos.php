@@ -58,7 +58,7 @@ require __DIR__ . '/../layouts/admin_header.php';
                             <td style="text-align: right;">
                                 <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
                                     <button class="btn-secondary btn-sm btn-icon" style="color: #879fff; border-color: rgba(99,120,255,0.3);"
-                                            onclick="editCurso(<?= $curso['id'] ?>, '<?= htmlspecialchars(addslashes($curso['nombre'])) ?>', '<?= htmlspecialchars(addslashes($curso['turno'])) ?>')">
+                                            onclick="editCurso(<?= (int)$curso['id'] ?>, <?= \App\Helpers\SecurityHelper::jsArg($curso['nombre']) ?>, <?= \App\Helpers\SecurityHelper::jsArg($curso['turno']) ?>)">
                                         <i class="bi bi-pencil"></i>
                                     </button>
                                     <form method="POST" action="/edunexo/admin/cursos/toggle" style="margin: 0;">

@@ -119,8 +119,8 @@ class DocenteGestionController {
                 if (!$permitidos->fetch()) throw new \RuntimeException('Estudiante inválido.');
                 $presente = isset($dato['presente']) ? 1 : 0;
                 $justificada = $presente ? 0 : (isset($dato['justificada']) ? 1 : 0);
-                // Se guarda texto plano: las vistas ya escapan al mostrar (sanitize() lo escapaba dos veces).
-                $observacion = mb_substr(trim((string)($dato['observacion'] ?? '')), 0, 500);
+                // Texto plano: se escapa al mostrar (las vistas usan htmlspecialchars).
+                $observacion = mb_substr(SecurityHelper::sanitize((string)($dato['observacion'] ?? '')), 0, 500);
                 foreach ($destinos as $destino) {
                     $upsert->execute([(int)$id, $destino, $fecha, $presente, $justificada, $observacion]);
                 }

@@ -55,7 +55,7 @@
                     </td>
                     <td style="text-align: right;">
                         <button class="btn-secondary btn-sm btn-icon" style="color: #879fff; border-color: rgba(99,120,255,0.3);"
-                            onclick="editTutor(<?= $t['id'] ?>,'<?= addslashes($t['nombre_completo']) ?>','<?= addslashes($t['telefono']) ?>')">
+                            onclick="editTutor(<?= (int)$t['id'] ?>,<?= \App\Helpers\SecurityHelper::jsArg($t['nombre_completo']) ?>,<?= \App\Helpers\SecurityHelper::jsArg($t['telefono']) ?>)">
                             <i class="bi bi-pencil"></i>
                         </button>
                         <form method="POST" action="/edunexo/admin/tutores/toggle" style="display:inline; margin:0;">

@@ -61,7 +61,7 @@
                     <td style="text-align: right;">
                         <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
                             <button class="btn-secondary btn-sm btn-icon" style="color: #879fff; border-color: rgba(99,120,255,0.3);" 
-                                onclick="editUsuario(<?= $u['id'] ?>,'<?= addslashes($u['nombre']) ?>','<?= addslashes($u['username']) ?>','<?= addslashes($u['email'] ?? '') ?>','<?= $u['rol'] ?>')">
+                                onclick="editUsuario(<?= (int)$u['id'] ?>,<?= \App\Helpers\SecurityHelper::jsArg($u['nombre']) ?>,<?= \App\Helpers\SecurityHelper::jsArg($u['username']) ?>,<?= \App\Helpers\SecurityHelper::jsArg($u['email'] ?? '') ?>,<?= \App\Helpers\SecurityHelper::jsArg($u['rol']) ?>)">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <?php if ($u['id'] != $_SESSION['user_id']): ?>

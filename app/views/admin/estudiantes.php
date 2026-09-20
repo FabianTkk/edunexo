@@ -57,7 +57,7 @@
                     <td style="text-align: right;">
                         <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
                             <button class="btn-secondary btn-sm btn-icon" style="color: #879fff; border-color: rgba(99,120,255,0.3);"
-                                onclick="editEst(<?= $e['id'] ?>,'<?= addslashes($e['ci']) ?>','<?= addslashes($e['nombre_completo']) ?>',<?= $e['curso_id'] ?? 0 ?>,<?= $e['tutor_id'] ?? 0 ?>)">
+                                onclick="editEst(<?= (int)$e['id'] ?>,<?= \App\Helpers\SecurityHelper::jsArg($e['ci']) ?>,<?= \App\Helpers\SecurityHelper::jsArg($e['nombre_completo']) ?>,<?= (int)($e['curso_id'] ?? 0) ?>,<?= (int)($e['tutor_id'] ?? 0) ?>)">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <form method="POST" action="/edunexo/admin/estudiantes/toggle" style="margin:0;">

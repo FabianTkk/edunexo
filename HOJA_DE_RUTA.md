@@ -27,9 +27,12 @@ Archivos tocados: app/controllers/DocenteGestionController.php, CronController.p
 - [ ] Probar en el navegador lo que no se pudo probar en las pruebas automaticas: botones "Todos presentes/ausentes", buscador, contador, casilla "Aplicar a todas".
 - [ ] Si git diff muestra archivos enteros como cambiados, es por saltos de linea (LF contra CRLF). Con "git diff --ignore-space-at-eol --stat" se ve el cambio real.
 
+- [ ] Paso 1 (escapado doble): ejecutar la limpieza de datos viejos. Primero copia de la base: mysqldump -u root edunexo_db > backup_antes_de_limpiar.sql . Luego, en la carpeta del proyecto: php database/limpiar_entidades.php (solo muestra que cambiaria) y, si la lista se ve bien, php database/limpiar_entidades.php --apply
+- [ ] Paso 1: probar en el navegador (no se pudo automatizar): con un usuario, un tutor y un estudiante cuyo nombre tenga apostrofe o comillas (por ejemplo D'Angelo), abrir el boton de editar de cada pantalla admin y ver que el formulario muestre el nombre bien; y en Envios WhatsApp abrir "Ver detalle" de un reporte.
+
 ## 3. Pasos siguientes, en orden
 
-### Paso 1 (SIGUIENTE): escapado doble de SecurityHelper::sanitize()
+### Paso 1 (HECHO en codigo; falta commit y limpieza de datos): escapado doble de SecurityHelper::sanitize()
 
 Problema: sanitize() escapa el HTML al guardar y las vistas lo escapan otra vez al mostrar. Un texto como O'Brien se muestra como O&#039;Brien; en un textarea de edicion, cada vez que se guarda se codifica un nivel mas (&amp;#039;...). Ademas el mensaje de WhatsApp toma los textos crudos de la base, asi que las entidades HTML llegan al tutor.
 
@@ -42,9 +45,14 @@ Plan:
 4. Limpiar datos viejos con un script unico (database/limpiar_entidades.php): html_entity_decode(..., ENT_QUOTES | ENT_HTML5, 'UTF-8') sobre las columnas del inventario. Hacer mysqldump antes.
 5. Prueba: crear y editar un reporte, aviso y perfil con el texto  O'Brien & "comillas" <b>x</b>  y verificar: en la base queda crudo; el formulario lo muestra igual una sola vez; editar 3 veces no lo cambia; el mensaje de WhatsApp lo muestra bien; el HTML de la pagina lo muestra escapado (ver codigo fuente).
 
-Archivos probables: app/helpers/SecurityHelper.php, todos los controladores del inventario, vistas con echo sin escapar.
+Resultado (2026-09-20):
+- SecurityHelper::sanitize() ahora solo hace trim y quita caracteres de control. Ya no escapa HTML ni usa strip_tags (strip_tags borraba texto legitimo: "menor que <5 anios" quedaba "menor que "). Se agregaron SecurityHelper::e() (escapar para HTML) y SecurityHelper::jsArg() (pasar un valor a JavaScript dentro de un onclick).
+- Auditoria de salida: se revisaron las 32 vistas y todas las impresiones. Las consultas SQL ya usaban parametros, asi que quitar el escapado no abre inyeccion SQL. Se corrigieron 7 onclick con addslashes (estudiantes, tutores, usuarios, materias, cursos, tipos de evaluacion y envios WhatsApp): cuatro de ellos se volvian explotables sin el escapado de entrada, porque una comilla doble en un nombre rompia el atributo HTML. Tambien se escapa el contenido de verDetalle() (innerHTML) y la inicial del avatar en los dos layouts.
+- Nuevo: database/limpiar_entidades.php (decodifica los datos viejos; modo prueba por defecto, --apply para escribir; seguro de repetir).
+- Regla desde ahora: todo texto de usuario se guarda crudo y se escapa SIEMPRE al imprimir (htmlspecialchars o SecurityHelper::e()); en onclick usar SecurityHelper::jsArg(); en innerHTML de JavaScript escapar con una funcion como escHtml().
+- Pruebas: 70 combinaciones (7 vistas por 10 textos hostiles) sin fallas, y contra las vistas viejas fallaban; edicion repetida 3 veces del mismo reporte deja el texto identico (antes crecia a &amp;amp;amp;#039;); limpieza con casos de 1 y 2 niveles y controles que no deben tocarse.
 
-### Paso 2: zona horaria
+### Paso 2 (SIGUIENTE): zona horaria
 
 Problema: public/index.php no fija la zona horaria de PHP. Si php.ini tiene UTC, despues de las 21:00 en Paraguay la fecha por defecto de la asistencia es la de manana. Ademas la ventana de 48 horas para editar reportes compara created_at de MySQL (zona de MySQL) con time() de PHP (zona de PHP); si no coinciden, la ventana se corre horas.
 
@@ -98,6 +106,7 @@ Plan:
 - [ ] Anio lectivo: cursos y asistencias no tienen anio; el proximo anio se van a mezclar los datos.
 - [ ] DocenteMateriasController tiene una rama para admin que no se puede alcanzar, porque docente_header.php redirige a login a quien no sea docente. Quitar la rama o crear la vista admin.
 - [ ] Revisar si docente_header.php y docente_footer.php cargan Bootstrap JS dos veces.
+- [ ] SecurityHelper::getClientIp() confia en el encabezado X-Forwarded-For, que el cliente puede falsificar. Quien lo cambie en cada intento evita el limite de intentos de login. Usar solo REMOTE_ADDR, salvo que haya un proxy confiable delante.
 - [ ] La sintaxis VALUES() en INSERT ... ON DUPLICATE KEY UPDATE esta marcada como obsoleta en MySQL 8.0.20 o superior. Funciona, pero conviene reemplazarla cuando se actualice el motor (MariaDB no acepta la sintaxis nueva, asi que revisar cual se usa en produccion).
 
 ## 4. Como se probo lo hecho (para repetirlo despues de cada paso)
@@ -113,4 +122,5 @@ Casos que hay que volver a comprobar despues de cada cambio:
 
 ## 5. Registro
 
-- 2026-09-20: fixes de asistencia, mensajes de WhatsApp y reportes semanales (seccion 1). Pendiente commit y push. Siguiente: paso 1.
+- 2026-09-20: fixes de asistencia, mensajes de WhatsApp y reportes semanales (seccion 1). Commit f33ca0e subido a GitHub.
+- 2026-09-20: paso 1 (escapado doble de sanitize) hecho en codigo y probado. Pendiente: commit, ejecutar limpiar_entidades.php sobre la base, probar los modales en el navegador. Siguiente: paso 2.

@@ -5,7 +5,7 @@ if (!isset($_SESSION['user_id']) || $_SESSION['rol'] !== 'docente') {
     exit;
 }
 $nombre    = $_SESSION['nombre'];
-$inicial   = strtoupper(mb_substr($nombre, 0, 1, 'UTF-8'));
+$inicial   = htmlspecialchars(strtoupper(mb_substr($nombre, 0, 1, 'UTF-8')), ENT_QUOTES, 'UTF-8');
 $csrfToken = \App\Helpers\SecurityHelper::generateCsrfToken();
 $uri       = $_SERVER['REQUEST_URI'];
 
