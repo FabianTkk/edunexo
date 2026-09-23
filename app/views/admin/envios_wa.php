@@ -147,9 +147,12 @@
                             </div>
                         </td>
 
-                        <!-- Docente -->
-                        <td style="color: var(--text-muted); font-size: 0.85rem;">
-                            <?= htmlspecialchars($ev['docente_nombre'] ?? '—') ?>
+                        <!-- Docente(s) -->
+                        <td style="color: var(--text-muted); font-size: 0.85rem; max-width: 220px;">
+                            <?= htmlspecialchars($ev['docentes'] ?? '—') ?>
+                            <?php if ((int)($ev['cantidad_reportes'] ?? 0) > 1): ?>
+                                <div style="font-size: 0.75rem; color: #a5b4fc;"><?= (int)$ev['cantidad_reportes'] ?> reportes en este mensaje</div>
+                            <?php endif; ?>
                         </td>
 
                         <!-- Estado -->
@@ -197,7 +200,7 @@
                                 <!-- Ver detalle del reporte -->
                                 <button class="btn-secondary btn-sm btn-icon" style="color: var(--text-muted); border-color: rgba(255,255,255,0.1);"
                                     title="Ver Detalle del Reporte"
-                                    onclick="verDetalle(<?= \App\Helpers\SecurityHelper::jsArg($ev['estudiante']) ?>,<?= \App\Helpers\SecurityHelper::jsArg($ev['tutor'] ?? '—') ?>,<?= \App\Helpers\SecurityHelper::jsArg(date('d/m/Y', strtotime($ev['periodo_semana']))) ?>,<?= (int)$ev['dias_ausente'] ?>,<?= \App\Helpers\SecurityHelper::jsArg($ev['calificacion_general'] ?? 'Logrado') ?>,<?= (int)($ev['tareas_incompletas'] ?? 0) ?>,<?= \App\Helpers\SecurityHelper::jsArg($ev['comportamiento'] ?? '') ?>,<?= \App\Helpers\SecurityHelper::jsArg($ev['incidentes_disciplinarios'] ?? '') ?>)">
+                                    onclick="verDetalle(<?= \App\Helpers\SecurityHelper::jsArg($ev['estudiante']) ?>,<?= \App\Helpers\SecurityHelper::jsArg($ev['tutor'] ?? '—') ?>,<?= \App\Helpers\SecurityHelper::jsArg(date('d/m/Y', strtotime($ev['periodo_semana']))) ?>,<?= \App\Helpers\SecurityHelper::jsArg(json_encode($ev['reportes'], JSON_UNESCAPED_UNICODE)) ?>)">
                                     <i class="bi bi-eye"></i>
                                 </button>
                             </div>
@@ -290,9 +293,33 @@ function escHtml(valor) {
     return String(valor ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 }
 
-function verDetalle(estudiante, tutor, semana, ausencias, calificacion, tareas, comportamiento, incidentes) {
-    [estudiante, tutor, semana, ausencias, calificacion, tareas, comportamiento, incidentes] =
-        [estudiante, tutor, semana, ausencias, calificacion, tareas, comportamiento, incidentes].map(escHtml);
+function verDetalle(estudiante, tutor, semana, reportesJson) {
+    [estudiante, tutor, semana] = [estudiante, tutor, semana].map(escHtml);
+    let reportes = [];
+    try { reportes = JSON.parse(reportesJson) || []; } catch (e) { reportes = []; }
+    const ausencias = reportes.length ? (reportes[0].dias_ausente ?? 0) : 0;
+
+    const bloquesDocentes = reportes.map(r => {
+        const docente = escHtml(r.docente_nombre || 'Docente');
+        const calificacion = escHtml(r.calificacion_general || 'No evaluado');
+        const comportamiento = escHtml(r.comportamiento || 'Bueno');
+        const tareas = escHtml(r.tareas_incompletas ?? 0);
+        const incidentes = escHtml(r.incidentes_disciplinarios || '');
+        return `
+        <div style="margin-bottom: 0.9rem; padding-bottom: 0.9rem; border-bottom: 1px solid rgba(255,255,255,0.08);">
+            <div style="font-weight: 700; color: #a5b4fc; margin-bottom: 0.4rem;">${docente}</div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+                <div><span style="color: var(--text-muted); font-size: 0.78rem; display:block;">Calificación</span><span style="color: var(--text-primary); font-weight:600;">${calificacion}</span></div>
+                <div><span style="color: var(--text-muted); font-size: 0.78rem; display:block;">Tareas incompletas</span><span style="color: var(--text-primary);">${tareas}</span></div>
+            </div>
+            <div style="margin-bottom: ${incidentes ? '0.5rem' : '0'};">
+                <span style="color: var(--text-muted); font-size: 0.78rem; display:block;">Comportamiento</span>
+                <div style="color: var(--text-primary); background: rgba(0,0,0,0.25); padding: 0.5rem 0.7rem; border-radius: 6px; font-size: 0.875rem; margin-top: 0.2rem;">${comportamiento}</div>
+            </div>
+            ${incidentes ? `<div><span style="color: var(--text-muted); font-size: 0.78rem; display:block;">Incidentes / Observaciones</span><div style="color: var(--text-primary); background: rgba(0,0,0,0.25); padding: 0.5rem 0.7rem; border-radius: 6px; font-size: 0.875rem; white-space: pre-wrap; margin-top: 0.2rem;">${incidentes}</div></div>` : ''}
+        </div>`;
+    }).join('');
+
     document.getElementById('detalleBody').innerHTML = `
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
             <div>
@@ -311,34 +338,13 @@ function verDetalle(estudiante, tutor, semana, ausencias, calificacion, tareas, 
                 <strong style="color: #a5b4fc;">${semana}</strong>
             </div>
             <div>
-                <span style="color: var(--text-muted); display: block; font-size: 0.8rem;">Calificación General</span>
-                <span style="color: var(--text-primary); font-weight: 600;">${calificacion}</span>
-            </div>
-            <div>
-                <span style="color: var(--text-muted); display: block; font-size: 0.8rem;">Días Ausente</span>
+                <span style="color: var(--text-muted); display: block; font-size: 0.8rem;">Días ausente (la semana, no cambia por docente)</span>
                 <span style="color: var(--text-primary);">${ausencias} día(s)</span>
             </div>
-            <div>
-                <span style="color: var(--text-muted); display: block; font-size: 0.8rem;">Tareas Incompletas</span>
-                <span style="color: var(--text-primary);">${tareas} tarea(s)</span>
-            </div>
         </div>
 
-        <div style="margin-bottom: 0.75rem;">
-            <span style="color: var(--text-muted); display: block; font-size: 0.8rem; margin-bottom: 0.25rem;">Comportamiento</span>
-            <div style="color: var(--text-primary); background: rgba(0,0,0,0.25); padding: 0.6rem 0.8rem; border-radius: 6px; font-size: 0.9rem;">
-                ${comportamiento || 'Bueno'}
-            </div>
-        </div>
-
-        ${incidentes ? `
-        <div style="margin-bottom: 0;">
-            <span style="color: var(--text-muted); display: block; font-size: 0.8rem; margin-bottom: 0.25rem;">Incidentes / Observaciones</span>
-            <div style="color: var(--text-primary); background: rgba(0,0,0,0.25); padding: 0.6rem 0.8rem; border-radius: 6px; font-size: 0.875rem; white-space: pre-wrap;">
-                ${incidentes}
-            </div>
-        </div>
-        ` : ''}
+        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 0.5rem;">Este es el mensaje que recibe el tutor: incluye el aporte de ${reportes.length} docente(s).</div>
+        ${bloquesDocentes || '<div style="color: var(--text-muted);">No hay reportes cargados para esta semana.</div>'}
     `;
     openModal('detalleModal');
 }

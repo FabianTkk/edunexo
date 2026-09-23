@@ -33,6 +33,9 @@ Archivos tocados: app/controllers/DocenteGestionController.php, CronController.p
 - [ ] Paso 2 (zona horaria): verificar en tu PC que tu PHP conoce la regla actual de Paraguay. En la terminal de Laragon: php -r "date_default_timezone_set('America/Asuncion'); echo date('P T');"  Debe imprimir -03:00 -03. Si imprime -04:00 -04, tu base de zonas horarias de PHP esta vieja: en public/index.php cambiar 'America/Asuncion' por 'Etc/GMT+3' (fijo UTC-3).
 - [ ] Paso 2: probar en el navegador que "Mis reportes" muestre el boton Editar en un reporte recien creado, y que la columna "Creado" muestre la hora local correcta.
 
+- [ ] Paso 3 (mensajes agrupados): ejecutar database/migration_envios_agrupados.sql. Antes, copia de seguridad (mysqldump). El script primero MUESTRA si hay reportes duplicados (mismo docente, mismo estudiante, misma semana); si aparecen filas, resolvelas (editando o borrando el sobrante) ANTES de que la restriccion se agregue solita en la proxima corrida del mismo script.
+- [ ] Paso 3: probar en el navegador: como docente, cargar un reporte de un estudiante que ya tenga un reporte de otro docente esa semana, y confirmar el mensaje "sumado al envio de WhatsApp de esta semana". Como admin, abrir Envios WhatsApp y verificar la columna "Docente(s)" y el boton "Ver detalle" con varios docentes.
+
 ## 3. Pasos siguientes, en orden
 
 ### Paso 1 (HECHO en codigo; falta commit y limpieza de datos): escapado doble de SecurityHelper::sanitize()
@@ -72,34 +75,34 @@ Resultado (2026-09-20):
 - Pruebas (con faketime y MySQL simulado en distintas zonas): a las 22:30 hora de Paraguay el sistema viejo proponia la fecha de manana en la asistencia y ahora propone la de hoy. Con MySQL en hora local y PHP en UTC, el boton Editar desaparecia 3 horas antes de vencer; con la configuracion inversa aparecia 3 horas despues y el clic daba error. Ahora coincide en ambos casos. Con MySQL en +09:00, NOW() ya coincide con PHP.
 - Regla desde ahora: cualquier script nuevo que se ejecute fuera de public/index.php (por ejemplo por linea de comandos o una tarea programada) debe llamar a date_default_timezone_set('America/Asuncion') antes de usar fechas o Database.
 
-### Paso 3 (SIGUIENTE): tutor equivocado en el saludo y envios de WhatsApp
+### Paso 3 (HECHO en codigo; falta commit y migracion): un solo mensaje de WhatsApp por estudiante y semana, y tutor equivocado en el saludo
 
-Problemas:
-- CronController arma el saludo con una consulta LEFT JOIN de tutores_estudiantes y tutores sin filtrar por el telefono del envio. Si un estudiante tiene dos tutores, el saludo puede nombrar a uno distinto del que recibe el mensaje.
-- guardarReporte crea un solo envio (el primer tutor activo), pero prepararEnviosWhatsApp crea uno por cada tutor activo. Son dos criterios distintos.
-- Si el estudiante no tiene tutor activo, guardarReporte inserta un envio con telefono vacio.
+Pedido del usuario (2026-09-20): que el mensaje de WhatsApp reuna los reportes de todos los docentes de un estudiante en un solo mensaje por semana, en lugar de mandar un mensaje por cada reporte. Esto absorbe tambien la decision pendiente del Paso 4 (reportes duplicados): se eligio la variante "varios reportes, un solo mensaje" en lugar de "un solo reporte por semana", porque no se pierde el aporte individual de cada docente.
 
-Plan:
-1. En CronController unir el tutor por telefono: ... JOIN tutores t ON t.id = te.tutor_id AND t.telefono = ew.destinatario_telefono.
-2. Decidir la politica (recomendado: un envio por cada tutor activo) y usarla igual en guardarReporte y prepararEnviosWhatsApp, idealmente en un metodo privado compartido.
-3. Si no hay tutor activo, no crear el envio y avisar al docente con un mensaje.
-4. Prueba: estudiante con dos tutores; verificar que cada mensaje saluda al tutor correcto.
+Resultado (2026-09-20):
+- envios_wa dejo de estar atado a un reporte especifico (reporte_id). Ahora tiene sus propias columnas estudiante_id + periodo_semana, con una restriccion unica junto con destinatario_telefono: un solo envio por alumno, semana y tutor, sin importar cuantos docentes reporten esa semana.
+- reportes tiene su propia restriccion unica (estudiante_id, usuario_id, periodo_semana): un docente no puede cargar dos reportes del mismo estudiante la misma semana (mensaje claro si lo intenta), pero DOS DOCENTES DISTINTOS si pueden, y sus reportes se juntan en un solo mensaje.
+- Al guardar o editar un reporte (DocenteGestionController::sincronizarEnvioWhatsApp), se encola (o reactiva a 'pendiente') el envio de cada tutor activo del estudiante para esa semana. Si ya habia un envio de otro docente, no se crea uno nuevo: se reutiliza. Si el estudiante no tiene tutor activo, se avisa al docente y no se encola nada (antes se guardaba un envio con telefono vacio).
+- CronController arma el mensaje con una seccion nueva "REPORTES DE TUS DOCENTES" que lista a cada docente que reporto esa semana con su calificacion, comportamiento, tareas y incidentes; la asistencia, notas y avisos siguen siendo unicos para todo el mensaje (ya eran globales, no por reporte). Si se borraran todos los reportes de la semana antes de enviarse, el envio se marca 'error' con un mensaje claro en lugar de mandar un mensaje vacio.
+- De paso quedó resuelto el bug del tutor equivocado: el saludo busca al tutor por el TELEFONO que realmente recibe el mensaje (t.telefono = ew.destinatario_telefono), no por el primer tutor que aparezca del estudiante. Aplica tambien en el listado admin (antes mostraba un tutor cualquiera del estudiante, sin relacion con el telefono real).
+- Borrar un reporte (dentro de las 48hs) ya no borra el envio agrupado: reporte_id en envios_wa pasa a ON DELETE SET NULL (antes era CASCADE); el mensaje se arma igual con los reportes que queden.
+- prepararEnviosWhatsApp() (boton manual del docente) y el auto-sync de AdminEnviosWaController::index() usan la misma agrupacion (INSERT IGNORE / ON DUPLICATE KEY), y ya no crean filas con telefono vacio cuando no hay tutor activo.
+- Vista admin de Envios WhatsApp: la columna "Docente" ahora es "Docente(s)" con la lista de nombres y, si hay mas de uno, un aviso "N reportes en este mensaje". "Ver detalle" muestra un bloque por cada docente (calificacion, comportamiento, tareas, incidentes) en lugar de un unico reporte.
+- Regla desde ahora: nada en el codigo debe asumir que un envios_wa tiene un solo reporte. Cualquier vista o consulta nueva que muestre "el reporte" de un envio debe buscar TODOS los reportes de ese estudiante+semana (normalizando al lunes), no seguir reporte_id.
 
-### Paso 4: reportes duplicados por estudiante y semana
+Pruebas (con MariaDB real, dos docentes distintos del mismo curso reportando al mismo estudiante):
+- Migracion aplicada dos veces sin error (idempotente); confirmado que detecta duplicados existentes antes de agregar la restriccion.
+- Dos docentes reportan a Carlos la misma semana: sigue habiendo UN SOLO envios_wa, con 2 filas en reportes; el mensaje final trae a los dos docentes.
+- Saludo con el tutor correcto: un estudiante con dos tutores (dos telefonos) recibe dos mensajes, cada uno saludando al tutor dueño de ESE telefono.
+- Editar un reporte que ya estaba 'enviado' lo vuelve a poner 'pendiente' (se re-encola para el proximo envio).
+- Borrar uno de los dos reportes de la semana no borra el envio: el mensaje se arma con el que queda.
+- Reporte creado para un estudiante sin tutor activo: no se encola ningun envio, se avisa al docente.
+- El mismo docente no puede cargar 2 reportes del mismo estudiante/semana (mensaje de error claro).
+- Listado admin agrupado: columna "Docente(s)" muestra los 2 nombres separados por coma y el aviso "2 reportes en este mensaje"; "Ver detalle" simulado en un DOM de prueba (node) arma los 2 bloques correctamente, incluso con textos hostiles (apostrofes, comillas, <img onerror>) que quedan escapados como texto y no como HTML/JS ejecutable.
 
-Problema: dos docentes (o el mismo docente dos veces) pueden crear un reporte del mismo estudiante y semana, y el tutor recibe dos mensajes casi iguales (la asistencia y las notas del mensaje son de todo el estudiante, no de la materia).
+### Paso 4 (SIGUIENTE, reducido): la columna estudiantes.curso (texto) duplica a estudiantes.curso_id
 
-Decision de producto pendiente (elegir una):
-- A) Un reporte por estudiante y semana, sin importar el docente (UNIQUE estudiante_id + periodo_semana). Simple, un solo mensaje.
-- B) Un reporte por estudiante, semana y docente (UNIQUE estudiante_id + usuario_id + periodo_semana), y el mensaje agrupa lo de todos los docentes. Mas trabajo en CronController.
-
-Plan (con A):
-1. Detectar duplicados existentes: SELECT estudiante_id, periodo_semana, COUNT(*) FROM reportes GROUP BY estudiante_id, periodo_semana HAVING COUNT(*) > 1;
-2. Normalizar semanas viejas al lunes: UPDATE reportes SET periodo_semana = DATE_SUB(periodo_semana, INTERVAL WEEKDAY(periodo_semana) DAY); (puede generar duplicados nuevos: repetir el paso 1 despues).
-3. Resolver duplicados a mano, luego agregar la restriccion UNIQUE en una migracion nueva en database/.
-4. En guardarReporte capturar el error de duplicado y mostrar un mensaje claro ("Ya existe un reporte de ese estudiante para esa semana").
-
-### Paso 5: estudiantes.curso (texto) duplica a estudiantes.curso_id
+(El resto del Paso 4 original -reportes duplicados- ya se resolvio como parte del Paso 3 de arriba, con la variante "varios reportes, un solo mensaje".)
 
 Problema: el nombre del curso esta guardado dos veces. Si se renombra un curso o se cambia el curso_id de un estudiante, el texto queda desactualizado. Los reportes, el dashboard y algunas vistas usan el texto; la asistencia usa curso_id.
 
@@ -136,3 +139,4 @@ Casos que hay que volver a comprobar despues de cada cambio:
 - 2026-09-20: fixes de asistencia, mensajes de WhatsApp y reportes semanales (seccion 1). Commit f33ca0e subido a GitHub.
 - 2026-09-20: paso 1 (escapado doble de sanitize) hecho en codigo y probado. Pendiente: commit, ejecutar limpiar_entidades.php sobre la base, probar los modales en el navegador. Siguiente: paso 2.
 - 2026-09-20: paso 2 (zona horaria) hecho en codigo y probado. Pendiente: commit, verificar la zona en tu PHP y probar Mis reportes en el navegador. Siguiente: paso 3.
+- 2026-09-20: paso 3 (mensajes de WhatsApp agrupados por estudiante+semana, en lugar de uno por reporte; de paso corrige el tutor equivocado del saludo) hecho en codigo y probado. Esto absorbio la decision pendiente del viejo Paso 4 (reportes duplicados). Pendiente: commit, ejecutar migration_envios_agrupados.sql, probar en el navegador. Siguiente: paso 4 (la columna estudiantes.curso duplicada).

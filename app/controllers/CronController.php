@@ -22,17 +22,15 @@ class CronController {
         $nombreColegio = $config['nombre_colegio'] ?? 'Nombre del Colegio';
         $telefonoColegio = $config['telefono_wa_remitente'] ?? '595XXXXXXXXX';
 
-        // 2. Obtener datos del envio
+        // 2. Obtener datos del envio (agrupado por estudiante+semana+tutor: puede reunir reportes de varios docentes).
         $stmt = $db->prepare("
             SELECT ew.id AS envio_id, ew.destinatario_telefono, ew.estado,
-                   r.id AS reporte_id, r.estudiante_id, r.periodo_semana, r.dias_ausente,
+                   ew.estudiante_id, ew.periodo_semana,
                    e.nombre_completo AS estudiante_nombre, e.ci AS estudiante_ci,
-                   t.nombre_completo AS tutor_nombre, t.telefono AS tutor_telefono
+                   t.nombre_completo AS tutor_nombre
             FROM envios_wa ew
-            JOIN reportes r ON ew.reporte_id = r.id
-            JOIN estudiantes e ON r.estudiante_id = e.id
-            LEFT JOIN tutores_estudiantes te ON e.id = te.estudiante_id
-            LEFT JOIN tutores t ON te.tutor_id = t.id
+            JOIN estudiantes e ON e.id = ew.estudiante_id
+            LEFT JOIN tutores t ON t.telefono = ew.destinatario_telefono AND t.activo = 1
             WHERE ew.id = ?
             LIMIT 1
         ");
@@ -43,14 +41,14 @@ class CronController {
             return ['success' => false, 'error' => 'Registro de envío no encontrado.'];
         }
 
-        $telefonoTutor = $envio['tutor_telefono'] ?? $envio['destinatario_telefono'];
+        // El tutor se busca por el TELEFONO que realmente recibe el mensaje, no por el primero
+        // que aparezca para el estudiante: asi el saludo nunca nombra a un tutor distinto.
         $estudianteId = $envio['estudiante_id'];
-        // La semana siempre va de lunes a viernes; si el reporte se cargo con otra fecha, se lleva al lunes.
-        $periodoSemana = date('Y-m-d', strtotime('monday this week', strtotime($envio['periodo_semana'])));
+        $periodoSemana = $envio['periodo_semana'];
         $finSemana = date('Y-m-d', strtotime($periodoSemana . ' + 4 days'));
 
-        // 3. Log de validación
-        $valido = (!empty($telefonoTutor) && $telefonoTutor === $envio['destinatario_telefono']) ? 1 : 0;
+        // 3. Log de validación: valido si el telefono destino corresponde a un tutor activo real.
+        $valido = $envio['tutor_nombre'] !== null ? 1 : 0;
         try {
             $stmtLog = $db->prepare("INSERT INTO logs_validacion (estudiante_id, telefono_intentado, resultado, fecha_intento) VALUES (?, ?, ?, NOW())");
             $stmtLog->execute([$estudianteId, $envio['destinatario_telefono'], $valido]);
@@ -64,7 +62,32 @@ class CronController {
                 'success' => false,
                 'destinatario' => $envio['destinatario_telefono'],
                 'estudiante' => $envio['estudiante_nombre'],
-                'error' => 'El teléfono registrado del tutor no coincide con el destinatario del reporte.'
+                'error' => 'El teléfono destino no corresponde a ningún tutor activo de este estudiante.'
+            ];
+        }
+
+        // 3b. Reportes de TODOS los docentes que cargaron algo para este estudiante esa semana.
+        // La comparacion normaliza periodo_semana al lunes por si quedara algun dato viejo sin normalizar.
+        $stmtReportes = $db->prepare("
+            SELECT r.calificacion_general, r.comportamiento, r.tareas_incompletas, r.incidentes_disciplinarios, r.dias_ausente,
+                   u.nombre AS docente_nombre
+            FROM reportes r
+            JOIN usuarios u ON u.id = r.usuario_id
+            WHERE r.estudiante_id = ?
+              AND DATE_SUB(r.periodo_semana, INTERVAL WEEKDAY(r.periodo_semana) DAY) = ?
+            ORDER BY u.nombre
+        ");
+        $stmtReportes->execute([$estudianteId, $periodoSemana]);
+        $reportesSemana = $stmtReportes->fetchAll();
+
+        if (!$reportesSemana) {
+            // Puede pasar si se borraron todos los reportes de la semana antes de que se enviara el mensaje.
+            $db->prepare("UPDATE envios_wa SET estado = 'error' WHERE id = ?")->execute([$envioId]);
+            return [
+                'success' => false,
+                'destinatario' => $envio['destinatario_telefono'],
+                'estudiante' => $envio['estudiante_nombre'],
+                'error' => 'No quedan reportes cargados para esta semana (se habrán borrado antes del envío).'
             ];
         }
 
@@ -110,6 +133,20 @@ class CronController {
             }
             $mensaje .= "- Ausencias justificadas: " . count($diasJustificados) . "\n\n";
         }
+
+        // REPORTES DE LOS DOCENTES (uno por cada docente que cargo algo esta semana)
+        $mensaje .= "REPORTES DE TUS DOCENTES:\n";
+        foreach ($reportesSemana as $reporte) {
+            $mensaje .= "- {$reporte['docente_nombre']}: {$reporte['calificacion_general']} | Comportamiento: {$reporte['comportamiento']}";
+            if ((int)$reporte['tareas_incompletas'] > 0) {
+                $mensaje .= " | Tareas incompletas: {$reporte['tareas_incompletas']}";
+            }
+            $mensaje .= "\n";
+            if (!empty($reporte['incidentes_disciplinarios'])) {
+                $mensaje .= "  Incidentes: {$reporte['incidentes_disciplinarios']}\n";
+            }
+        }
+        $mensaje .= "\n";
 
         // CALIFICACIONES Y OBSERVACIONES
         $stmtNotas = $db->prepare("

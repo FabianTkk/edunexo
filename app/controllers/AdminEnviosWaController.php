@@ -17,16 +17,16 @@ class AdminEnviosWaController {
     public function index() {
         $db = Database::getConnection();
 
-        // 1. Auto-sincronizar reportes existentes creados por docentes que aún no estén encolados en envios_wa
+        // 1. Auto-sincronizar reportes existentes que aún no estén encolados en envios_wa.
+        // Se agrupa por estudiante+semana+tutor: si ya hay un envio para esa combinacion (creado
+        // por el propio docente al guardar su reporte, o por otro docente antes), no se duplica.
         try {
             $db->exec("
-                INSERT INTO envios_wa (reporte_id, destinatario_telefono, estado, fecha_hora_envio)
-                SELECT r.id, COALESCE(t.telefono, ''), 'pendiente', NULL
+                INSERT IGNORE INTO envios_wa (reporte_id, estudiante_id, periodo_semana, destinatario_telefono, estado, fecha_hora_envio)
+                SELECT r.id, r.estudiante_id, DATE_SUB(r.periodo_semana, INTERVAL WEEKDAY(r.periodo_semana) DAY), t.telefono, 'pendiente', NULL
                 FROM reportes r
-                LEFT JOIN tutores_estudiantes te ON te.estudiante_id = r.estudiante_id
-                LEFT JOIN tutores t ON t.id = te.tutor_id AND t.activo = 1
-                LEFT JOIN envios_wa wa ON wa.reporte_id = r.id
-                WHERE wa.id IS NULL
+                JOIN tutores_estudiantes te ON te.estudiante_id = r.estudiante_id
+                JOIN tutores t ON t.id = te.tutor_id AND t.activo = 1
             ");
         } catch (\Throwable $e) {
             error_log("[AdminEnviosWaController] Error en sincronización automática: " . $e->getMessage());
@@ -47,14 +47,14 @@ class AdminEnviosWaController {
         }
 
         if (!empty($desde)) {
-            // Filtra por la semana académica (periodo_semana) o por la fecha de envío/creación
-            $where[]  = '(r.periodo_semana >= ? OR DATE(COALESCE(ew.fecha_hora_envio, r.created_at)) >= ?)';
+            // Filtra por la semana del envio o por su fecha de envio
+            $where[]  = '(ew.periodo_semana >= ? OR DATE(ew.fecha_hora_envio) >= ?)';
             $params[] = $desde;
             $params[] = $desde;
         }
 
         if (!empty($hasta)) {
-            $where[]  = '(r.periodo_semana <= ? OR DATE(COALESCE(ew.fecha_hora_envio, r.created_at)) <= ?)';
+            $where[]  = '(ew.periodo_semana <= ? OR DATE(ew.fecha_hora_envio) <= ?)';
             $params[] = $hasta;
             $params[] = $hasta;
         }
@@ -68,29 +68,58 @@ class AdminEnviosWaController {
             $params[] = $term;
         }
 
-        // 3. Consulta principal con priorización de pendientes y orden por semana y fecha
+        // 3. Consulta principal con priorización de pendientes y orden por semana y fecha.
+        // Un envio puede reunir varios reportes (de distintos docentes): se muestran contados y
+        // con la lista de nombres; el detalle completo de cada uno se ve en "Ver detalle".
         $sql = "
             SELECT ew.*, e.nombre_completo AS estudiante, e.ci, e.curso,
-                   t.nombre_completo AS tutor, t.telefono AS tutor_telefono,
-                   r.periodo_semana, r.calificacion_general, r.comportamiento, r.dias_ausente,
-                   r.tareas_incompletas, r.incidentes_disciplinarios, r.created_at AS fecha_creacion_reporte,
-                   u.nombre AS docente_nombre
+                   t.nombre_completo AS tutor,
+                   (SELECT COUNT(*) FROM reportes r2 WHERE r2.estudiante_id = ew.estudiante_id
+                        AND DATE_SUB(r2.periodo_semana, INTERVAL WEEKDAY(r2.periodo_semana) DAY) = ew.periodo_semana) AS cantidad_reportes,
+                   (SELECT GROUP_CONCAT(DISTINCT u2.nombre ORDER BY u2.nombre SEPARATOR ', ') FROM reportes r2
+                        JOIN usuarios u2 ON u2.id = r2.usuario_id
+                        WHERE r2.estudiante_id = ew.estudiante_id
+                        AND DATE_SUB(r2.periodo_semana, INTERVAL WEEKDAY(r2.periodo_semana) DAY) = ew.periodo_semana) AS docentes,
+                   (SELECT MIN(r2.created_at) FROM reportes r2 WHERE r2.estudiante_id = ew.estudiante_id
+                        AND DATE_SUB(r2.periodo_semana, INTERVAL WEEKDAY(r2.periodo_semana) DAY) = ew.periodo_semana) AS fecha_creacion_reporte
             FROM envios_wa ew
-            JOIN reportes r ON r.id = ew.reporte_id
-            JOIN estudiantes e ON e.id = r.estudiante_id
-            LEFT JOIN usuarios u ON u.id = r.usuario_id
-            LEFT JOIN tutores_estudiantes te ON te.estudiante_id = e.id
-            LEFT JOIN tutores t ON t.id = te.tutor_id
+            JOIN estudiantes e ON e.id = ew.estudiante_id
+            LEFT JOIN tutores t ON t.telefono = ew.destinatario_telefono
             WHERE " . implode(' AND ', $where) . "
             ORDER BY 
                 CASE WHEN ew.estado = 'pendiente' THEN 1 ELSE 2 END ASC,
-                r.periodo_semana DESC,
-                COALESCE(ew.fecha_hora_envio, r.created_at) DESC,
+                ew.periodo_semana DESC,
+                COALESCE(ew.fecha_hora_envio, ew.periodo_semana) DESC,
                 ew.id DESC
         ";
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
         $envios = $stmt->fetchAll();
+
+        // 3b. Detalle de cada reporte agrupado en cada envio (para el modal "Ver detalle"), en una
+        // sola consulta: se buscan por la combinacion estudiante+semana de los envios ya obtenidos.
+        $reportesPorGrupo = [];
+        if ($envios) {
+            $grupos = [];
+            foreach ($envios as $ev) {
+                $grupos[$ev['estudiante_id'] . '|' . $ev['periodo_semana']] = [$ev['estudiante_id'], $ev['periodo_semana']];
+            }
+            $condiciones = array_fill(0, count($grupos), '(r.estudiante_id = ? AND DATE_SUB(r.periodo_semana, INTERVAL WEEKDAY(r.periodo_semana) DAY) = ?)');
+            $paramsDetalle = array_merge(...array_values($grupos));
+            $stmtDetalle = $db->prepare("SELECT r.estudiante_id, DATE_SUB(r.periodo_semana, INTERVAL WEEKDAY(r.periodo_semana) DAY) AS semana,
+                    r.calificacion_general, r.comportamiento, r.tareas_incompletas, r.incidentes_disciplinarios, r.dias_ausente,
+                    u.nombre AS docente_nombre
+                FROM reportes r JOIN usuarios u ON u.id = r.usuario_id
+                WHERE " . implode(' OR ', $condiciones));
+            $stmtDetalle->execute($paramsDetalle);
+            foreach ($stmtDetalle->fetchAll() as $r) {
+                $reportesPorGrupo[$r['estudiante_id'] . '|' . $r['semana']][] = $r;
+            }
+        }
+        foreach ($envios as &$ev) {
+            $ev['reportes'] = $reportesPorGrupo[$ev['estudiante_id'] . '|' . $ev['periodo_semana']] ?? [];
+        }
+        unset($ev);
 
         // 4. Contadores para métricas y botón de procesar
         $conteoPendientes = (int)$db->query("SELECT COUNT(*) FROM envios_wa WHERE estado = 'pendiente'")->fetchColumn();

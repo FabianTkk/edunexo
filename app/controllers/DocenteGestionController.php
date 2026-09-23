@@ -45,6 +45,30 @@ class DocenteGestionController {
         return (int)$stmt->fetchColumn();
     }
 
+    /**
+     * Encola (o re-encola) el envio de WhatsApp agrupado por estudiante+semana+tutor.
+     * Un solo envio reune los reportes de TODOS los docentes de esa semana: si ya habia uno
+     * para ese estudiante y esa semana, se reactiva (vuelve a 'pendiente') para que el proximo
+     * envio incluya el reporte nuevo o editado; no crea un mensaje aparte por cada docente.
+     * Devuelve la cantidad de tutores activos a los que se les encolo el envio (0 si no tiene).
+     */
+    private function sincronizarEnvioWhatsApp($db, int $reporteId, int $estudianteId, string $lunes): int {
+        $tutores = $db->prepare("SELECT t.telefono FROM tutores t JOIN tutores_estudiantes te ON te.tutor_id = t.id WHERE te.estudiante_id = ? AND t.activo = 1");
+        $tutores->execute([$estudianteId]);
+        $telefonos = $tutores->fetchAll(\PDO::FETCH_COLUMN);
+        if (!$telefonos) return 0;
+
+        $upsert = $db->prepare(
+            "INSERT INTO envios_wa (reporte_id, estudiante_id, periodo_semana, destinatario_telefono, estado, fecha_hora_envio)
+             VALUES (?, ?, ?, ?, 'pendiente', NULL)
+             ON DUPLICATE KEY UPDATE reporte_id = VALUES(reporte_id), estado = 'pendiente', fecha_hora_envio = NULL"
+        );
+        foreach ($telefonos as $telefono) {
+            $upsert->execute([$reporteId, $estudianteId, $lunes, $telefono]);
+        }
+        return count($telefonos);
+    }
+
     public function estudiantes(): void {
         $asignaciones = $this->asignaciones();
         $cmdId = (int)($_GET['cmd_id'] ?? ($asignaciones[0]['id'] ?? 0));
@@ -157,15 +181,28 @@ class DocenteGestionController {
         $cal=in_array($_POST['calificacion_general']??'', ['Logrado','En Proceso','Aun no logrado','No evaluado'],true)?$_POST['calificacion_general']:'No evaluado'; $com=in_array($_POST['comportamiento']??'', ['Excelente','Bueno','Regular','Requiere Atencion'],true)?$_POST['comportamiento']:'Bueno';
         // Las ausencias salen de la asistencia registrada, no se escriben a mano.
         $dias=$this->diasAusentes($db,$estId,$fecha);
-        $db->prepare("INSERT INTO reportes (estudiante_id,usuario_id,periodo_semana,calificacion_general,dias_ausente,tareas_incompletas,comportamiento,incidentes_disciplinarios) VALUES (?,?,?,?,?,?,?,?)")->execute([$estId,$uid,$fecha,$cal,$dias,max(0,(int)($_POST['tareas_incompletas']??0)),$com,SecurityHelper::sanitize($_POST['incidentes']??'')]);
-        $nuevoReporteId = (int)$db->lastInsertId();
-        if ($nuevoReporteId > 0) {
-            $stmtTutor = $db->prepare("SELECT t.telefono FROM tutores t JOIN tutores_estudiantes te ON te.tutor_id = t.id WHERE te.estudiante_id = ? AND t.activo = 1 LIMIT 1");
-            $stmtTutor->execute([$estId]);
-            $telTutor = $stmtTutor->fetchColumn() ?: '';
-            $db->prepare("INSERT INTO envios_wa (reporte_id, destinatario_telefono, estado, fecha_hora_envio) VALUES (?, ?, 'pendiente', NULL)")->execute([$nuevoReporteId, $telTutor]);
+        try {
+            $db->prepare("INSERT INTO reportes (estudiante_id,usuario_id,periodo_semana,calificacion_general,dias_ausente,tareas_incompletas,comportamiento,incidentes_disciplinarios) VALUES (?,?,?,?,?,?,?,?)")->execute([$estId,$uid,$fecha,$cal,$dias,max(0,(int)($_POST['tareas_incompletas']??0)),$com,SecurityHelper::sanitize($_POST['incidentes']??'')]);
+        } catch (\PDOException $e) {
+            // Codigo 23000 = restriccion unica (uq_reporte_docente_semana): ya cargaste un reporte de este estudiante esa semana.
+            if ($e->getCode() === '23000') { $_SESSION['error']='Ya creaste un reporte de este estudiante para esa semana. Editalo en la lista de abajo en vez de crear uno nuevo.'; $this->volver('docente/reportes'); }
+            throw $e;
         }
-        $_SESSION['success']='Reporte creado y preparado para envío por WhatsApp.'; $this->volver('docente/reportes');
+        $nuevoReporteId = (int)$db->lastInsertId();
+        // Un solo mensaje de WhatsApp por estudiante y semana: si otro docente ya habia cargado
+        // el suyo, este reporte se suma al mismo envio en lugar de generar uno aparte.
+        $contarOtros = $db->prepare("SELECT COUNT(*) FROM reportes WHERE estudiante_id=? AND periodo_semana=?");
+        $contarOtros->execute([$estId, $fecha]);
+        $otrosReportes = (int)$contarOtros->fetchColumn() - 1;
+        $tutoresEncolados = $this->sincronizarEnvioWhatsApp($db, $nuevoReporteId, $estId, $fecha);
+        if ($tutoresEncolados === 0) {
+            $_SESSION['success'] = 'Reporte creado, pero el estudiante no tiene un tutor activo registrado: no se preparó ningún envío de WhatsApp.';
+        } elseif ($otrosReportes > 0) {
+            $_SESSION['success'] = "Reporte creado y sumado al envío de WhatsApp de esta semana, junto con el de {$otrosReportes} docente(s) más.";
+        } else {
+            $_SESSION['success'] = 'Reporte creado y preparado para envío por WhatsApp.';
+        }
+        $this->volver('docente/reportes');
     }
     public function actualizarReporte(): void {
         $uid=(int)$_SESSION['user_id']; $id=(int)($_POST['reporte_id']??0); $estId=(int)($_POST['estudiante_id']??0); $fecha=$_POST['periodo_semana']??'';
@@ -175,12 +212,27 @@ class DocenteGestionController {
         $cal=in_array($_POST['calificacion_general']??'', ['Logrado','En Proceso','Aun no logrado','No evaluado'],true)?$_POST['calificacion_general']:'No evaluado'; $com=in_array($_POST['comportamiento']??'', ['Excelente','Bueno','Regular','Requiere Atencion'],true)?$_POST['comportamiento']:'Bueno';
         $dias=$this->diasAusentes($db,$estId,$fecha);
         $stmt=$db->prepare("UPDATE reportes SET estudiante_id=?,periodo_semana=?,calificacion_general=?,dias_ausente=?,tareas_incompletas=?,comportamiento=?,incidentes_disciplinarios=? WHERE id=? AND usuario_id=? AND created_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR)");
-        $stmt->execute([$estId,$fecha,$cal,$dias,max(0,(int)($_POST['tareas_incompletas']??0)),$com,SecurityHelper::sanitize($_POST['incidentes']??''),$id,$uid]);
-        $_SESSION[$stmt->rowCount() ? 'success' : 'error'] = $stmt->rowCount() ? 'Reporte actualizado.' : 'El plazo de 48 horas venció o el reporte no existe.'; $this->volver('docente/reportes');
+        try {
+            $stmt->execute([$estId,$fecha,$cal,$dias,max(0,(int)($_POST['tareas_incompletas']??0)),$com,SecurityHelper::sanitize($_POST['incidentes']??''),$id,$uid]);
+        } catch (\PDOException $e) {
+            if ($e->getCode() === '23000') { $_SESSION['error']='Ya tenés otro reporte de ese estudiante para esa semana.'; $this->volver('docente/reportes'); }
+            throw $e;
+        }
+        if ($stmt->rowCount()) {
+            // El reporte cambio (o cambio de semana/estudiante): se re-encola el envio agrupado
+            // de la semana que corresponda ahora, para que el proximo mensaje lleve lo nuevo.
+            $this->sincronizarEnvioWhatsApp($db, $id, $estId, $fecha);
+            $_SESSION['success'] = 'Reporte actualizado.';
+        } else {
+            $_SESSION['error'] = 'El plazo de 48 horas venció o el reporte no existe.';
+        }
+        $this->volver('docente/reportes');
     }
     public function eliminarReporte(): void {
         $uid=(int)$_SESSION['user_id']; $id=(int)($_POST['reporte_id']??0);
         if(!SecurityHelper::validateCsrfToken($_POST['csrf_token']??'') || !$id) { $_SESSION['error']='Solicitud inválida.'; $this->volver('docente/reportes'); }
+        // reporte_id en envios_wa es ON DELETE SET NULL: borrar este reporte no borra el envio
+        // agrupado (los demas docentes de esa semana siguen incluidos en el mismo mensaje).
         $stmt=Database::getConnection()->prepare("DELETE FROM reportes WHERE id=? AND usuario_id=? AND created_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR)"); $stmt->execute([$id,$uid]);
         $_SESSION[$stmt->rowCount() ? 'success' : 'error'] = $stmt->rowCount() ? 'Reporte eliminado.' : 'El plazo de 48 horas venció o el reporte no existe.'; $this->volver('docente/reportes');
     }
@@ -194,22 +246,32 @@ class DocenteGestionController {
     public function enviosWhatsApp(): void {
         $db = Database::getConnection();
         $uid = (int)$_SESSION['user_id'];
-        $pendientes = $db->prepare("SELECT r.id, e.nombre_completo, e.curso, r.periodo_semana, t.nombre_completo AS tutor, t.telefono
+        // Reportes de este docente que todavia no fueron sumados a un envio agrupado
+        // (estudiante+semana+tutor). Al preparar, se agrupan con los de otros docentes si los hay.
+        $pendientes = $db->prepare("SELECT DISTINCT r.estudiante_id, e.nombre_completo, e.curso, DATE_SUB(r.periodo_semana, INTERVAL WEEKDAY(r.periodo_semana) DAY) AS periodo_semana, t.nombre_completo AS tutor, t.telefono
             FROM reportes r
             JOIN estudiantes e ON e.id = r.estudiante_id
             JOIN tutores_estudiantes te ON te.estudiante_id = e.id
             JOIN tutores t ON t.id = te.tutor_id AND t.activo = 1
-            LEFT JOIN envios_wa wa ON wa.reporte_id = r.id AND wa.destinatario_telefono = t.telefono
+            LEFT JOIN envios_wa wa ON wa.estudiante_id = r.estudiante_id
+                AND wa.periodo_semana = DATE_SUB(r.periodo_semana, INTERVAL WEEKDAY(r.periodo_semana) DAY)
+                AND wa.destinatario_telefono = t.telefono
             WHERE r.usuario_id = ? AND wa.id IS NULL
-            ORDER BY r.periodo_semana DESC, e.nombre_completo");
+            ORDER BY periodo_semana DESC, e.nombre_completo");
         $pendientes->execute([$uid]);
         $pendientes = $pendientes->fetchAll();
 
-        $historial = $db->prepare("SELECT wa.estado, wa.destinatario_telefono, wa.fecha_hora_envio, e.nombre_completo, e.curso, r.periodo_semana
+        // Envios donde este docente aporto al menos un reporte, sin importar quien mas participo
+        // ni cual de los reportes quedo como referencia (reporte_id puede pertenecer a otro docente).
+        $historial = $db->prepare("SELECT wa.estado, wa.destinatario_telefono, wa.fecha_hora_envio, e.nombre_completo, e.curso, wa.periodo_semana
             FROM envios_wa wa
-            JOIN reportes r ON r.id = wa.reporte_id
-            JOIN estudiantes e ON e.id = r.estudiante_id
-            WHERE r.usuario_id = ?
+            JOIN estudiantes e ON e.id = wa.estudiante_id
+            WHERE EXISTS (
+                SELECT 1 FROM reportes r
+                WHERE r.estudiante_id = wa.estudiante_id
+                  AND DATE_SUB(r.periodo_semana, INTERVAL WEEKDAY(r.periodo_semana) DAY) = wa.periodo_semana
+                  AND r.usuario_id = ?
+            )
             ORDER BY wa.fecha_hora_envio DESC LIMIT 12");
         $historial->execute([$uid]);
         $historial = $historial->fetchAll();
@@ -219,14 +281,14 @@ class DocenteGestionController {
         if (!SecurityHelper::validateCsrfToken($_POST['csrf_token'] ?? '')) { $_SESSION['error'] = 'Token inválido.'; $this->volver('docente/envios-wa'); }
         $db = Database::getConnection();
         $uid = (int)$_SESSION['user_id'];
-        $stmt = $db->prepare("INSERT INTO envios_wa (reporte_id, destinatario_telefono, estado)
-            SELECT r.id, t.telefono, 'pendiente'
+        // INSERT IGNORE: si ya existe un envio para ese estudiante+semana+tutor (de este docente
+        // o de otro), no se toca; solo se crean los que faltan. Asi un solo mensaje reune a todos.
+        $stmt = $db->prepare("INSERT IGNORE INTO envios_wa (reporte_id, estudiante_id, periodo_semana, destinatario_telefono, estado, fecha_hora_envio)
+            SELECT r.id, r.estudiante_id, DATE_SUB(r.periodo_semana, INTERVAL WEEKDAY(r.periodo_semana) DAY), t.telefono, 'pendiente', NULL
             FROM reportes r
-            JOIN estudiantes e ON e.id = r.estudiante_id
-            JOIN tutores_estudiantes te ON te.estudiante_id = e.id
+            JOIN tutores_estudiantes te ON te.estudiante_id = r.estudiante_id
             JOIN tutores t ON t.id = te.tutor_id AND t.activo = 1
-            LEFT JOIN envios_wa wa ON wa.reporte_id = r.id AND wa.destinatario_telefono = t.telefono
-            WHERE r.usuario_id = ? AND wa.id IS NULL");
+            WHERE r.usuario_id = ?");
         $stmt->execute([$uid]);
         $_SESSION['success'] = $stmt->rowCount() . ' envío(s) preparado(s) para WhatsApp.';
         $this->volver('docente/envios-wa');
