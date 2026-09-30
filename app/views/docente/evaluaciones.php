@@ -103,7 +103,7 @@ require __DIR__ . '/../layouts/docente_header.php';
 
                                         <!-- Eliminar -->
                                         <form method="POST" action="/edunexo/docente/evaluaciones/delete" style="margin: 0; display: inline;"
-                                              onsubmit="return confirm('¿Estás seguro de eliminar esta evaluación? Si ya tiene notas cargadas, podrían perderse.')">
+                                              onsubmit="return confirm('¿Estás seguro de eliminar esta evaluación? Si ya tiene notas cargadas, el sistema no te va a dejar borrarla.')">
                                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
                                             <input type="hidden" name="cmd_id" value="<?= (int)$cmd_id ?>">
                                             <input type="hidden" name="id" value="<?= (int)$eval['id'] ?>">

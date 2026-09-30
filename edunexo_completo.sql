@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS `notas` (
   UNIQUE KEY `uq_notas_eval_estudiante` (`evaluacion_id`,`estudiante_id`),
   KEY `fk_notas_estudiante` (`estudiante_id`),
   CONSTRAINT `fk_notas_estudiante` FOREIGN KEY (`estudiante_id`) REFERENCES `estudiantes` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_notas_evaluacion` FOREIGN KEY (`evaluacion_id`) REFERENCES `evaluaciones` (`id`) ON DELETE CASCADE
+  CONSTRAINT `fk_notas_evaluacion` FOREIGN KEY (`evaluacion_id`) REFERENCES `evaluaciones` (`id`) ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Volcando datos para la tabla edunexo_db.notas: ~0 rows (aproximadamente)

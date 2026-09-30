@@ -55,10 +55,11 @@ class DashboardController {
             $usuarios_recientes = $stmt->fetchAll();
 
             $stmt = $db->query(
-                'SELECT r.id, e.nombre_completo, e.curso, u.nombre AS docente,
+                'SELECT r.id, e.nombre_completo, COALESCE(c.nombre, "Sin curso") AS curso, u.nombre AS docente,
                         r.calificacion_general, r.comportamiento, r.dias_ausente, r.periodo_semana
                  FROM reportes r
                  JOIN estudiantes e ON e.id = r.estudiante_id
+                 LEFT JOIN cursos c ON c.id = e.curso_id
                  LEFT JOIN usuarios u ON u.id = r.usuario_id
                  ORDER BY r.created_at DESC
                  LIMIT 6'
@@ -104,15 +105,16 @@ class DashboardController {
 
             // Dias con falta no justificada, tomados de la asistencia real (no de los reportes).
             $stmt = $db->prepare(
-                'SELECT e.nombre_completo, e.curso,
+                'SELECT e.nombre_completo, COALESCE(c.nombre, "Sin curso") AS curso,
                         COUNT(DISTINCT a.fecha) AS total_ausencias
                  FROM asistencias a
                  JOIN curso_materia_docente cmd ON cmd.id = a.curso_materia_docente_id
                  JOIN estudiantes e ON e.id = a.estudiante_id
+                 LEFT JOIN cursos c ON c.id = e.curso_id
                  WHERE cmd.docente_id = :uid
                    AND a.presente = 0
                    AND a.justificada = 0
-                 GROUP BY e.id, e.nombre_completo, e.curso
+                 GROUP BY e.id, e.nombre_completo, c.nombre
                  ORDER BY total_ausencias DESC, e.nombre_completo
                  LIMIT 6'
             );
@@ -120,11 +122,12 @@ class DashboardController {
             $estudiantes_ausencias = $stmt->fetchAll();
 
             $stmt = $db->prepare(
-                'SELECT r.id, e.nombre_completo, e.curso, r.calificacion_general,
+                'SELECT r.id, e.nombre_completo, COALESCE(c.nombre, "Sin curso") AS curso, r.calificacion_general,
                         r.comportamiento, r.dias_ausente, r.periodo_semana,
                         r.created_at
                  FROM reportes r
                  JOIN estudiantes e ON e.id = r.estudiante_id
+                 LEFT JOIN cursos c ON c.id = e.curso_id
                  WHERE r.usuario_id = :uid
                  ORDER BY r.created_at DESC
                  LIMIT 8'

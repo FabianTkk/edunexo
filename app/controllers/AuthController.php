@@ -44,6 +44,14 @@ class AuthController {
         $user = $userModel->findByUsername($username);
 
         if ($user && password_verify($password, $user['password'])) {
+            // Cuenta desactivada por el admin: la contrasena es correcta pero no puede entrar.
+            // Se avisa recien despues de validar la contrasena para no revelar que usuarios existen.
+            if ((int)($user['activo'] ?? 0) !== 1) {
+                $_SESSION['error'] = 'Tu cuenta esta desactivada. Comunicate con el administrador.';
+                header('Location: /edunexo/login');
+                exit;
+            }
+
             SecurityHelper::clearAttempts('login');
 
             // Guardar datos antes de regenerar

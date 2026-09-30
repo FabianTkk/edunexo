@@ -43,6 +43,19 @@ if (!in_array($url, $rutasPublicas) && isset($_SESSION['user_id'])) {
         }
     }
     $_SESSION['last_activity'] = time();
+
+    // Usuario desactivado (o borrado) despues de iniciar sesion: se corta la sesion abierta en el acto.
+    // El rol se toma de la base en cada pedido, asi un cambio de rol tambien aplica sin esperar al timeout.
+    $stmtUsuario = \App\Config\Database::getConnection()->prepare('SELECT activo, rol FROM usuarios WHERE id = ? LIMIT 1');
+    $stmtUsuario->execute([$_SESSION['user_id']]);
+    $usuarioActual = $stmtUsuario->fetch();
+    if (!$usuarioActual || (int)$usuarioActual['activo'] !== 1) {
+        session_unset();
+        $_SESSION['error'] = 'Tu cuenta esta desactivada. Comunicate con el administrador.';
+        header('Location: /edunexo/login');
+        exit;
+    }
+    $_SESSION['rol'] = $usuarioActual['rol'];
 }
 
 // ── CSRF token global ─────────────────────────────────────────────────────

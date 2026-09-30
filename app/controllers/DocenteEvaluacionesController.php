@@ -167,15 +167,35 @@ class DocenteEvaluacionesController {
         $db = Database::getConnection();
         
         try {
-            // Eliminar evaluación verificando la asignación correspondiente
-            $stmt = $db->prepare("DELETE FROM evaluaciones WHERE id = ? AND curso_materia_docente_id = ?");
-            if ($stmt->execute([$id, $cmd_id])) {
-                $_SESSION['success'] = 'Evaluación eliminada correctamente.';
+            // Solo se bloquea si hay notas con contenido real (puntaje u observacion).
+            // Las filas vacias que crea el guardado masivo sin completar nada no cuentan.
+            $existe = $db->prepare("SELECT id FROM evaluaciones WHERE id = ? AND curso_materia_docente_id = ?");
+            $existe->execute([$id, $cmd_id]);
+            if (!$existe->fetch()) {
+                $_SESSION['error'] = 'La evaluacion no existe o ya fue eliminada.';
             } else {
-                $_SESSION['error'] = 'No se pudo eliminar la evaluación.';
+                $conNotas = $db->prepare("SELECT COUNT(*) FROM notas WHERE evaluacion_id = ? AND (puntaje_obtenido IS NOT NULL OR (observacion IS NOT NULL AND observacion <> ''))");
+                $conNotas->execute([$id]);
+                $cantidad = (int)$conNotas->fetchColumn();
+
+                if ($cantidad > 0) {
+                    $_SESSION['error'] = "No se puede eliminar esta evaluacion porque tiene {$cantidad} calificacion(es) u observacion(es) cargadas. Si realmente queres borrarla, primero deja en blanco los puntajes y observaciones en la pantalla de notas.";
+                } else {
+                    $db->beginTransaction();
+                    try {
+                        // fk_notas_evaluacion es RESTRICT: primero se quitan las filas vacias y despues la evaluacion.
+                        $db->prepare("DELETE FROM notas WHERE evaluacion_id = ?")->execute([$id]);
+                        $db->prepare("DELETE FROM evaluaciones WHERE id = ? AND curso_materia_docente_id = ?")->execute([$id, $cmd_id]);
+                        $db->commit();
+                        $_SESSION['success'] = 'Evaluación eliminada correctamente.';
+                    } catch (\Throwable $e) {
+                        if ($db->inTransaction()) $db->rollBack();
+                        throw $e;
+                    }
+                }
             }
         } catch (\PDOException $e) {
-            // Código 23000 = restricción de clave foránea (tiene notas cargadas)
+            // Red de seguridad: la clave foranea (RESTRICT) frena el borrado si apareciera una nota en el medio.
             if ($e->getCode() == '23000') {
                 $_SESSION['error'] = 'No se puede eliminar esta evaluación porque ya tiene calificaciones cargadas para los estudiantes.';
             } else {
