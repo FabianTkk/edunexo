@@ -35,7 +35,7 @@
                     <th>CI</th>
                     <th>Nombre</th>
                     <th>Curso</th>
-                    <th>Tutor</th>
+                    <th>Tutores</th>
                     <th>Estado</th>
                     <th style="text-align: right;">Acciones</th>
                 </tr>
@@ -46,7 +46,7 @@
                     <td style="color: var(--text-muted);"><?= htmlspecialchars($e['ci']) ?></td>
                     <td style="font-weight: 600; color: var(--text-primary);"><?= htmlspecialchars($e['nombre_completo']) ?></td>
                     <td><?= htmlspecialchars($e['curso_nombre'] ?? '—') ?></td>
-                    <td><?= htmlspecialchars($e['tutor_nombre'] ?? '—') ?></td>
+                    <td><?= htmlspecialchars($e['tutores_nombres'] ?? '—') ?></td>
                     <td>
                         <?php if ($e['estado'] === 'activo'): ?>
                             <span class="chip chip-logrado">Activo</span>
@@ -57,7 +57,8 @@
                     <td style="text-align: right;">
                         <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
                             <button class="btn-secondary btn-sm btn-icon" style="color: #879fff; border-color: rgba(99,120,255,0.3);"
-                                onclick="editEst(<?= (int)$e['id'] ?>,<?= \App\Helpers\SecurityHelper::jsArg($e['ci']) ?>,<?= \App\Helpers\SecurityHelper::jsArg($e['nombre_completo']) ?>,<?= (int)($e['curso_id'] ?? 0) ?>,<?= (int)($e['tutor_id'] ?? 0) ?>)">
+                                data-tutores="<?= htmlspecialchars($e['tutor_ids'] ?? '') ?>"
+                                onclick="editEst(<?= (int)$e['id'] ?>,<?= \App\Helpers\SecurityHelper::jsArg($e['ci']) ?>,<?= \App\Helpers\SecurityHelper::jsArg($e['nombre_completo']) ?>,<?= (int)($e['curso_id'] ?? 0) ?>,this.dataset.tutores)">
                                 <i class="bi bi-pencil"></i>
                             </button>
                             <form method="POST" action="/edunexo/admin/estudiantes/toggle" style="margin:0;">
@@ -111,13 +112,19 @@
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">Tutor (opcional)</label>
-                    <select class="form-input no-icon" name="tutor_id" id="eTutor">
-                        <option value="0">-- Sin tutor --</option>
-                        <?php foreach ($tutores as $t): ?>
-                            <option value="<?= $t['id'] ?>"><?= htmlspecialchars($t['nombre_completo']) ?></option>
-                        <?php endforeach; ?>
-                    </select>
+                    <label class="form-label">Tutores (opcional, puede marcar varios)</label>
+                    <div style="max-height: 160px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.12); border-radius: 8px; padding: 0.5rem 0.75rem;">
+                        <?php if (empty($tutores)): ?>
+                            <span style="color: var(--text-muted); font-size: 0.9rem;">No hay tutores activos cargados.</span>
+                        <?php else: ?>
+                            <?php foreach ($tutores as $t): ?>
+                                <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.2rem 0; cursor: pointer;">
+                                    <input type="checkbox" class="tutor-check" name="tutor_ids[]" value="<?= (int)$t['id'] ?>">
+                                    <span><?= htmlspecialchars($t['nombre_completo']) ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">
@@ -144,6 +151,13 @@ modalOverlay.addEventListener('click', (e) => {
     if (e.target === modalOverlay) closeModal();
 });
 
+function marcarTutores(csv) {
+    const ids = (csv || '').split(',').filter(Boolean);
+    document.querySelectorAll('#estForm .tutor-check').forEach(cb => {
+        cb.checked = ids.includes(cb.value);
+    });
+}
+
 function resetForm() {
     form.action = '/edunexo/admin/estudiantes/store';
     document.getElementById('modalTitle').textContent = 'Nuevo Estudiante';
@@ -151,17 +165,17 @@ function resetForm() {
     document.getElementById('eCi').value = '';
     document.getElementById('eNombre').value = '';
     document.getElementById('eCurso').value = '';
-    document.getElementById('eTutor').value = '0';
+    marcarTutores('');
 }
 
-function editEst(id, ci, nombre, curso_id, tutor_id) {
+function editEst(id, ci, nombre, curso_id, tutores) {
     form.action = '/edunexo/admin/estudiantes/update';
     document.getElementById('modalTitle').textContent = 'Editar Estudiante';
     document.getElementById('eId').value = id;
     document.getElementById('eCi').value = ci;
     document.getElementById('eNombre').value = nombre;
     document.getElementById('eCurso').value = curso_id;
-    document.getElementById('eTutor').value = tutor_id || '0';
+    marcarTutores(tutores);
     openModal();
 }
 

@@ -1,4 +1,7 @@
 RewriteEngine On
+# Nunca servir archivos ocultos (.env, .git, etc.)
+RewriteRule (^|/)\. - [F,L]
+
 # No redirigir lo que ya va a /edunexo/public/
 RewriteCond %{REQUEST_URI} !^/edunexo/public/
 # Redirigir todo lo demás a la carpeta public (ruta relativa, sin /)

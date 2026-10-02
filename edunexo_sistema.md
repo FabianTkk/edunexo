@@ -103,7 +103,7 @@ EduNexo — {NombreColegio}
 
 - Método `enviar()` — Hace la llamada HTTP (cURL) a Evolution API
 - Limpia el número telefónico, obtiene credenciales de la tabla `configuracion` de la BD, y hace POST a `http://localhost:8080/message/sendText/{instancia}`
-- Constantes por defecto: `DEFAULT_API_URL = 'http://localhost:8080'`, `DEFAULT_API_KEY = 'edunexo_secret_key_2026'`, `DEFAULT_INSTANCE = 'edunexo'`
+- Valores por defecto: `DEFAULT_API_URL = 'http://localhost:8080'` y `DEFAULT_INSTANCE = 'edunexo'`. La API key ya no esta en el codigo: se lee del archivo `.env` (`EVOLUTION_API_KEY`) mediante `App\Config\Env`
 
 ---
 
@@ -170,7 +170,7 @@ Los datos de la API se guardan en la **tabla `configuracion` (id=1)** de la base
 |-------------|-------------|-------------------|
 | `instancia_evolution` | Nombre de la instancia en Evolution API | `edunexo` |
 | `url_evolution` | URL base del servidor | `http://localhost:8080` |
-| `apikey_evolution` | API Key de autenticación | `edunexo_secret_key_2026` |
+| `apikey_evolution` | (columna opcional, no existe en la base actual) la API key se lee de `.env` | — |
 | `telefono_wa_remitente` | Teléfono del colegio (aparece en el pie del mensaje WA) | — |
 | `nombre_colegio` | Nombre del colegio (aparece en el pie del mensaje WA) | — |
 

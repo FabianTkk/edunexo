@@ -2,12 +2,12 @@
 namespace App\Helpers;
 
 use App\Config\Database;
+use App\Config\Env;
 
 class WhatsAppHelper {
 
-    // Valores por defecto sincronizados con evolution-api/.env
+    // Valores por defecto. La API key NO va en el codigo: se lee de .env (EVOLUTION_API_KEY).
     public const DEFAULT_API_URL = 'http://localhost:8080';
-    public const DEFAULT_API_KEY = 'edunexo_secret_key_2026';
     public const DEFAULT_INSTANCE = 'edunexo';
 
     /**
@@ -31,9 +31,9 @@ class WhatsAppHelper {
         }
 
         // 2. Obtener configuración de la base de datos (o usar valores por defecto)
-        $instancia = self::DEFAULT_INSTANCE;
-        $baseUrl   = self::DEFAULT_API_URL;
-        $apiKey    = self::DEFAULT_API_KEY;
+        $instancia = Env::get('EVOLUTION_INSTANCE', self::DEFAULT_INSTANCE);
+        $baseUrl   = rtrim(Env::get('EVOLUTION_API_URL', self::DEFAULT_API_URL), '/');
+        $apiKey    = Env::get('EVOLUTION_API_KEY', '');
 
         try {
             $db = Database::getConnection();
@@ -53,6 +53,14 @@ class WhatsAppHelper {
             }
         } catch (\Throwable $e) {
             error_log("[WhatsAppHelper] Aviso: No se pudo leer la tabla configuracion, usando valores por defecto: " . $e->getMessage());
+        }
+
+        if ($apiKey === '') {
+            error_log('[WhatsAppHelper] Falta EVOLUTION_API_KEY en el archivo .env');
+            if ($debugInfo !== null) {
+                $debugInfo = ['error' => 'Falta EVOLUTION_API_KEY en .env', 'http_code' => 0];
+            }
+            return false;
         }
 
         // 3. Endpoint para Evolution API v2: /message/sendText/{instance}
@@ -124,9 +132,9 @@ class WhatsAppHelper {
      * ]
      */
     public static function estadoInstancia(): array {
-        $instancia = self::DEFAULT_INSTANCE;
-        $baseUrl   = self::DEFAULT_API_URL;
-        $apiKey    = self::DEFAULT_API_KEY;
+        $instancia = Env::get('EVOLUTION_INSTANCE', self::DEFAULT_INSTANCE);
+        $baseUrl   = rtrim(Env::get('EVOLUTION_API_URL', self::DEFAULT_API_URL), '/');
+        $apiKey    = Env::get('EVOLUTION_API_KEY', '');
 
         try {
             $db = Database::getConnection();
@@ -145,6 +153,15 @@ class WhatsAppHelper {
             }
         } catch (\Throwable $e) {
             // Ignorar y seguir con defaults
+        }
+
+        if ($apiKey === '') {
+            return [
+                'online'    => false,
+                'state'     => 'sin_configurar',
+                'http_code' => 0,
+                'error'     => 'Falta EVOLUTION_API_KEY en el archivo .env del proyecto.'
+            ];
         }
 
         $apiUrl = "{$baseUrl}/instance/connectionState/" . rawurlencode($instancia);

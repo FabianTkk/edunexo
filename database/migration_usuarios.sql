@@ -31,15 +31,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
 -- ALTER TABLE usuarios ADD COLUMN created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP AFTER activo;
 
 -- ───────────────────────────────────────────────────────────────────────────
--- Crear usuario admin de prueba (contraseña: Admin123)
--- IMPORTANTE: Cambiá la contraseña después del primer acceso
+-- Usuario admin: este script ya no crea uno con contrasena conocida.
+-- Crearlo desde la consola con:  php database/crear_admin.php
 -- ───────────────────────────────────────────────────────────────────────────
-INSERT IGNORE INTO usuarios (nombre, email, username, password, rol, activo)
-VALUES (
-    'Administrador',
-    'admin@edunexo.local',
-    'admin',
-    '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', -- Admin123
-    'admin',
-    1
-);
+-- (sin INSERT de usuarios a proposito)

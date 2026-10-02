@@ -54,7 +54,21 @@ $user = "root";
 $pass = "";  // Cambiar si tu MySQL tiene contrasena
 ```
 
-### 4. Acceder al sistema
+### 4. Crear el archivo .env
+
+Copiar `.env.example` como `.env` (en la raiz del proyecto) y completar `EVOLUTION_API_KEY`.
+El `.env` no se sube al repositorio.
+
+### 5. Crear el primer administrador
+
+El script SQL no trae usuarios. Desde la terminal de Laragon:
+
+```bash
+cd C:\laragon\www\edunexo
+php database/crear_admin.php
+```
+
+### 6. Acceder al sistema
 
 Con Laragon corriendo, abrir en el navegador:
 
@@ -64,14 +78,11 @@ http://localhost/edunexo
 
 ---
 
-## Usuarios de prueba
+## Usuarios
 
-| Usuario   | Contrasena | Rol     |
-|-----------|------------|---------|
-| Fabian03  | (la tuya)  | admin   |
-| jperez    | 123456     | docente |
-
-> Cambiar las contrasenas despues del primer acceso.
+El repositorio no incluye usuarios ni contrasenas. El primer administrador se crea con `php database/crear_admin.php`.
+Los docentes pueden registrarse desde `/register`, pero su cuenta queda pendiente: un administrador debe activarla
+desde Usuarios antes de que puedan iniciar sesion.
 
 ---
 
@@ -117,9 +128,10 @@ edunexo/
 ## Configuracion de Evolution API
 
 El sistema requiere una instancia de Evolution API para el modulo de WhatsApp.
-La configuracion de la API key y la URL del servidor se encuentra en `app/helpers/WhatsAppHelper.php`.
+La URL, la instancia y la API key se leen del archivo `.env` (ver `.env.example`).
+`EVOLUTION_API_KEY` debe ser igual a `AUTHENTICATION_API_KEY` del `.env` de evolution-api.
 
-> No subas tu API key al repositorio. Usa variables de entorno o un archivo `.env` excluido del repo.
+> El `.env` esta excluido del repositorio. Nunca subas una API key al codigo.
 
 ---
 

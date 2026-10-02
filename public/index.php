@@ -51,7 +51,7 @@ if (!in_array($url, $rutasPublicas) && isset($_SESSION['user_id'])) {
     $usuarioActual = $stmtUsuario->fetch();
     if (!$usuarioActual || (int)$usuarioActual['activo'] !== 1) {
         session_unset();
-        $_SESSION['error'] = 'Tu cuenta esta desactivada. Comunicate con el administrador.';
+        $_SESSION['error'] = 'Tu cuenta esta desactivada o pendiente de aprobacion. Comunicate con el administrador.';
         header('Location: /edunexo/login');
         exit;
     }

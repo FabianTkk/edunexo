@@ -47,7 +47,7 @@ class AuthController {
             // Cuenta desactivada por el admin: la contrasena es correcta pero no puede entrar.
             // Se avisa recien despues de validar la contrasena para no revelar que usuarios existen.
             if ((int)($user['activo'] ?? 0) !== 1) {
-                $_SESSION['error'] = 'Tu cuenta esta desactivada. Comunicate con el administrador.';
+                $_SESSION['error'] = 'Tu cuenta esta desactivada o pendiente de aprobacion. Comunicate con el administrador.';
                 header('Location: /edunexo/login');
                 exit;
             }
@@ -162,11 +162,13 @@ class AuthController {
             'usuario'  => $usuario,
             'password' => $password,
             'rol'      => $rol,
+            // Pendiente de aprobacion: el admin la activa desde Usuarios antes de que pueda iniciar sesion.
+            'activo'   => 0,
         ]);
 
         if ($userId) {
             SecurityHelper::clearAttempts('register');
-            $_SESSION['success'] = 'Cuenta creada exitosamente. Ya podes iniciar sesion.';
+            $_SESSION['success'] = 'Cuenta creada. Un administrador debe aprobarla antes de que puedas iniciar sesion.';
             header('Location: /edunexo/login');
             exit;
         }

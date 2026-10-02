@@ -249,10 +249,8 @@ CREATE TABLE IF NOT EXISTS `usuarios` (
   UNIQUE KEY `usuario` (`username`)
 ) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- Volcando datos para la tabla edunexo_db.usuarios: ~2 rows (aproximadamente)
-INSERT INTO `usuarios` (`id`, `nombre`, `username`, `password`, `email`, `rol`, `created_at`, `updated_at`, `activo`) VALUES
-	(1, 'Prof. Juan Pérez', 'jperez', '$2y$10$aq/6O1THxAVg3xkzUeJBZeigcf9DI43IDgYHVZdLyc8Z6hNDLyEzy', NULL, 'docente', '2026-08-24 21:51:37', '2026-08-24 23:47:35', 1),
-	(2, 'Rodney Fabian Farinha De Leon', 'Fabian03', '$2y$12$IA3uDveJR0f1dhOBJlje3.ckC90OTR5JqDFbOIhibuoSofN6FIacy', 'rodneyfabian2@gmail.com', 'admin', '2026-08-25 21:53:08', '2026-08-25 21:54:13', 1);
+-- Esta tabla se entrega vacia a proposito: no se suben usuarios ni contrasenas al repositorio.
+-- Para crear el primer administrador ejecutar:  php database/crear_admin.php
 
 /*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
 /*!40101 SET SQL_MODE=IFNULL(@OLD_SQL_MODE, '') */;

@@ -17,17 +17,14 @@ class AdminEstudiantesController {
         $db = Database::getConnection();
 
         $estudiantes = $db->query("
-            SELECT e.*, c.nombre AS curso_nombre, t.nombre_completo AS tutor_nombre, te.tutor_id
+            SELECT e.*, c.nombre AS curso_nombre,
+                   (SELECT GROUP_CONCAT(t.nombre_completo ORDER BY te.id SEPARATOR ', ')
+                    FROM tutores_estudiantes te JOIN tutores t ON t.id = te.tutor_id
+                    WHERE te.estudiante_id = e.id) AS tutores_nombres,
+                   (SELECT GROUP_CONCAT(te.tutor_id ORDER BY te.id)
+                    FROM tutores_estudiantes te WHERE te.estudiante_id = e.id) AS tutor_ids
             FROM estudiantes e
             LEFT JOIN cursos c ON c.id = e.curso_id
-            LEFT JOIN tutores_estudiantes te ON te.id = (
-                SELECT te2.id
-                FROM tutores_estudiantes te2
-                WHERE te2.estudiante_id = e.id
-                ORDER BY te2.id
-                LIMIT 1
-            )
-            LEFT JOIN tutores t ON t.id = te.tutor_id
             ORDER BY e.nombre_completo
         ")->fetchAll();
 
@@ -47,7 +44,6 @@ class AdminEstudiantesController {
         $ci       = SecurityHelper::sanitize($_POST['ci']             ?? '');
         $nombre   = SecurityHelper::sanitize($_POST['nombre_completo'] ?? '');
         $curso_id = (int)($_POST['curso_id'] ?? 0);
-        $tutor_id = (int)($_POST['tutor_id'] ?? 0);
 
         if (empty($ci) || empty($nombre) || $curso_id === 0) {
             $_SESSION['error'] = 'CI, nombre y curso son obligatorios.';
@@ -69,9 +65,10 @@ class AdminEstudiantesController {
         $stmt->execute([$ci, $nombre, $curso_id, $cn]);
         $newId = $db->lastInsertId();
 
-        if ($tutor_id > 0) {
+        $tutorIds = $this->tutoresSeleccionados($db);
+        foreach ($tutorIds as $tutorId) {
             $db->prepare("INSERT IGNORE INTO tutores_estudiantes (tutor_id, estudiante_id) VALUES (?,?)")
-               ->execute([$tutor_id, $newId]);
+               ->execute([$tutorId, $newId]);
         }
 
         $_SESSION['success'] = 'Estudiante creado correctamente.';
@@ -88,7 +85,6 @@ class AdminEstudiantesController {
         $ci       = SecurityHelper::sanitize($_POST['ci']             ?? '');
         $nombre   = SecurityHelper::sanitize($_POST['nombre_completo'] ?? '');
         $curso_id = (int)($_POST['curso_id'] ?? 0);
-        $tutor_id = (int)($_POST['tutor_id'] ?? 0);
 
         if ($id === 0 || empty($ci) || empty($nombre) || $curso_id === 0) {
             $_SESSION['error'] = 'Datos invalidos.';
@@ -107,17 +103,59 @@ class AdminEstudiantesController {
         $cursoNombre->execute([$curso_id]);
         $cn = $cursoNombre->fetchColumn() ?: '';
 
-        $db->prepare("UPDATE estudiantes SET ci=?, nombre_completo=?, curso_id=?, curso=? WHERE id=?")
-           ->execute([$ci, $nombre, $curso_id, $cn, $id]);
+        $tutorIds = $this->tutoresSeleccionados($db);
 
-        $db->prepare("DELETE FROM tutores_estudiantes WHERE estudiante_id=?")->execute([$id]);
-        if ($tutor_id > 0) {
-            $db->prepare("INSERT INTO tutores_estudiantes (tutor_id, estudiante_id) VALUES (?,?)")
-               ->execute([$tutor_id, $id]);
+        $db->beginTransaction();
+        try {
+            $db->prepare("UPDATE estudiantes SET ci=?, nombre_completo=?, curso_id=?, curso=? WHERE id=?")
+               ->execute([$ci, $nombre, $curso_id, $cn, $id]);
+
+            // Se sincronizan los tutores marcados en el formulario: solo se quitan los vinculos con tutores
+            // ACTIVOS que se desmarcaron. Los vinculos con tutores inactivos no aparecen en el formulario
+            // y se conservan tal cual. Los que ya estaban marcados no se tocan.
+            if ($tutorIds) {
+                $ph = implode(',', array_fill(0, count($tutorIds), '?'));
+                $db->prepare("DELETE te FROM tutores_estudiantes te JOIN tutores t ON t.id = te.tutor_id
+                              WHERE te.estudiante_id = ? AND t.activo = 1 AND te.tutor_id NOT IN ($ph)")
+                   ->execute(array_merge([$id], $tutorIds));
+            } else {
+                $db->prepare("DELETE te FROM tutores_estudiantes te JOIN tutores t ON t.id = te.tutor_id
+                              WHERE te.estudiante_id = ? AND t.activo = 1")
+                   ->execute([$id]);
+            }
+
+            $ins = $db->prepare("INSERT IGNORE INTO tutores_estudiantes (tutor_id, estudiante_id) VALUES (?,?)");
+            foreach ($tutorIds as $tutorId) {
+                $ins->execute([$tutorId, $id]);
+            }
+
+            $db->commit();
+        } catch (\Throwable $e) {
+            if ($db->inTransaction()) $db->rollBack();
+            error_log('[AdminEstudiantesController] Error al actualizar estudiante: ' . $e->getMessage());
+            $_SESSION['error'] = 'No se pudo actualizar el estudiante. Intenta de nuevo.';
+            header('Location: /edunexo/admin/estudiantes'); exit;
         }
 
         $_SESSION['success'] = 'Estudiante actualizado correctamente.';
         header('Location: /edunexo/admin/estudiantes'); exit;
+    }
+
+    /**
+     * Tutores marcados en el formulario (tutor_ids[]): solo ids enteros, sin repetir,
+     * que existan y esten activos.
+     */
+    private function tutoresSeleccionados(\PDO $db): array {
+        $ids = array_values(array_unique(array_filter(
+            array_map('intval', (array)($_POST['tutor_ids'] ?? [])),
+            fn($v) => $v > 0
+        )));
+        if (!$ids) return [];
+
+        $ph = implode(',', array_fill(0, count($ids), '?'));
+        $stmt = $db->prepare("SELECT id FROM tutores WHERE activo = 1 AND id IN ($ph)");
+        $stmt->execute($ids);
+        return array_map('intval', $stmt->fetchAll(\PDO::FETCH_COLUMN));
     }
 
     public function toggle() {

@@ -72,9 +72,13 @@ public function usernameExists($username) {
         // Validar rol: si viene 'admin' usa 'admin', de lo contrario asigna 'docente'
         $rol = (isset($data['rol']) && $data['rol'] === 'admin') ? 'admin' : 'docente';
 
+        // Por defecto la cuenta nace activa (alta hecha por el admin). El registro publico
+        // pasa 'activo' => 0 para que un administrador la apruebe antes de que pueda entrar.
+        $activo = isset($data['activo']) ? (int)(bool)$data['activo'] : 1;
+
         if ($hasEmail) {
             $sql = 'INSERT INTO usuarios (nombre, email, username, password, rol, activo, created_at)
-                    VALUES (:nombre, :email, :username, :password, :rol, 1, NOW())';
+                    VALUES (:nombre, :email, :username, :password, :rol, ' . $activo . ', NOW())';
             $params = [
                 ':nombre'   => $data['nombre'],
                 ':email'    => $data['email'] ?? null,
@@ -84,7 +88,7 @@ public function usernameExists($username) {
             ];
         } else {
             $sql = 'INSERT INTO usuarios (nombre, username, password, rol, activo, created_at)
-                    VALUES (:nombre, :username, :password, :rol, 1, NOW())';
+                    VALUES (:nombre, :username, :password, :rol, ' . $activo . ', NOW())';
             $params = [
                 ':nombre'   => $data['nombre'],
                 ':username' => $usernameVal,
