@@ -34,6 +34,13 @@
         </div>
     </div>
 
+    <?php if (!empty($conteoRetenidos)): ?>
+        <div style="margin-bottom: 1.5rem; padding: 0.75rem 1rem; border-radius: 8px; background: rgba(255,160,60,0.12); color: #ffd97d; font-size: 0.9rem;">
+            <i class="bi bi-pause-circle me-1"></i>
+            <?= (int)$conteoRetenidos ?> envío(s) retenido(s): no salen en el envío automático ni en "Procesar Pendientes" hasta que los liberes.
+        </div>
+    <?php endif; ?>
+
     <!-- Alertas de sesión -->
     <?php if (isset($_SESSION['success'])): ?>
         <div class="alert alert-success" style="margin-bottom: 1.5rem;">
@@ -149,7 +156,12 @@
 
                         <!-- Docente(s) -->
                         <td style="color: var(--text-muted); font-size: 0.85rem; max-width: 220px;">
-                            <?= htmlspecialchars($ev['docentes'] ?? '—') ?>
+                            <?php if ((int)($ev['cantidad_reportes'] ?? 0) === 0): ?>
+                                <span style="font-size: 0.8rem; color: #fbbf24;">Sin reporte de docente</span>
+                                <div style="font-size: 0.75rem;">Se envia con asistencia y notas</div>
+                            <?php else: ?>
+                                <?= htmlspecialchars($ev['docentes'] ?? '—') ?>
+                            <?php endif; ?>
                             <?php if ((int)($ev['cantidad_reportes'] ?? 0) > 1): ?>
                                 <div style="font-size: 0.75rem; color: #a5b4fc;"><?= (int)$ev['cantidad_reportes'] ?> reportes en este mensaje</div>
                             <?php endif; ?>
@@ -160,6 +172,15 @@
                             <span class="chip <?= $badgeClass ?>" style="<?= $badgeStyle ?>">
                                 <?= ucfirst($ev['estado']) ?>
                             </span>
+                            <?php if ($ev['estado'] === 'pendiente' && !empty($ev['retenido'])): ?>
+                                <div style="margin-top: 0.3rem;"><span class="chip chip-noeval"><i class="bi bi-pause-circle me-1"></i>Retenido</span></div>
+                            <?php endif; ?>
+                            <?php if (!empty($ev['editado_tras_envio'])): ?>
+                                <div style="margin-top: 0.3rem;"><span class="chip" style="background-color: rgba(255,160,60,0.15); color: #ffd97d;">Reporte editado tras el envío</span></div>
+                            <?php endif; ?>
+                            <?php if ($ev['estado'] === 'pendiente' && !empty($ev['tiene_texto_libre'])): ?>
+                                <div style="margin-top: 0.3rem; font-size: 0.75rem; color: var(--text-muted);">Incluye texto de docentes: revisalo</div>
+                            <?php endif; ?>
                         </td>
 
                         <!-- Fecha de Envío o Creación -->
@@ -197,6 +218,34 @@
                                     </button>
                                 <?php endif; ?>
 
+                                <!-- Vista previa del mensaje exacto -->
+                                <button type="button" class="btn-secondary btn-sm btn-icon" style="color: var(--text-muted); border-color: rgba(255,255,255,0.1);"
+                                    title="Ver el mensaje que recibe el tutor" onclick="verMensaje(<?= (int)$ev['id'] ?>, 'mensaje')">
+                                    <i class="bi bi-chat-text"></i>
+                                </button>
+
+                                <!-- Retener / liberar (solo pendientes) -->
+                                <?php if ($ev['estado'] === 'pendiente'): ?>
+                                    <form method="POST" action="/edunexo/admin/envios-wa/retener" style="margin: 0;">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                                        <input type="hidden" name="envio_id" value="<?= (int)$ev['id'] ?>">
+                                        <input type="hidden" name="accion" value="<?= !empty($ev['retenido']) ? 'liberar' : 'retener' ?>">
+                                        <button type="submit" class="btn-secondary btn-sm" style="padding: 0.3rem 0.6rem; display: inline-flex; align-items: center; gap: 0.3rem;"
+                                            title="<?= !empty($ev['retenido']) ? 'Volver a incluirlo en el envío automático' : 'No enviarlo en el envío automático hasta revisarlo' ?>">
+                                            <i class="bi <?= !empty($ev['retenido']) ? 'bi-play-circle' : 'bi-pause-circle' ?>"></i>
+                                            <span><?= !empty($ev['retenido']) ? 'Liberar' : 'Retener' ?></span>
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+
+                                <!-- Rectificación corta (reporte creado o editado después del envío) -->
+                                <?php if (!empty($ev['editado_tras_envio'])): ?>
+                                    <button type="button" class="btn-secondary btn-sm" style="color: #ffd97d; border-color: rgba(255,217,125,0.3); padding: 0.3rem 0.6rem; display: inline-flex; align-items: center; gap: 0.3rem;"
+                                        title="Enviar solo lo que cambió, sin repetir el mensaje completo" onclick="verMensaje(<?= (int)$ev['id'] ?>, 'rectificacion')">
+                                        <i class="bi bi-pencil-square"></i> <span>Rectificar</span>
+                                    </button>
+                                <?php endif; ?>
+
                                 <!-- Ver detalle del reporte -->
                                 <button class="btn-secondary btn-sm btn-icon" style="color: var(--text-muted); border-color: rgba(255,255,255,0.1);"
                                     title="Ver Detalle del Reporte"
@@ -223,6 +272,29 @@
         <div class="modal-body" id="detalleBody"></div>
         <div class="modal-footer">
             <button class="btn-secondary" onclick="closeModal('detalleModal')">Cerrar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Vista previa del mensaje / rectificación -->
+<div class="modal-overlay" id="mensajeModal">
+    <div class="custom-modal" style="max-width: 560px;">
+        <div class="modal-header">
+            <div class="modal-title" id="mensajeTitulo">Mensaje que recibirá el tutor</div>
+            <button class="modal-close" onclick="closeModal('mensajeModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="mensajeAviso" style="display: none; margin-bottom: 0.75rem; padding: 0.6rem 0.8rem; border-radius: 8px; background: rgba(255,160,60,0.12); color: #ffd97d; font-size: 0.85rem;"></div>
+            <div id="mensajeMeta" style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 0.5rem;"></div>
+            <pre id="mensajeTexto" style="white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 0.9rem; color: var(--text-primary); background: rgba(0,0,0,0.25); padding: 0.9rem 1rem; border-radius: 8px; margin: 0; max-height: 50vh; overflow-y: auto;"></pre>
+        </div>
+        <div class="modal-footer">
+            <form method="POST" action="/edunexo/admin/envios-wa/rectificar" id="mensajeFormRect" style="margin: 0; display: none;">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken) ?>">
+                <input type="hidden" name="envio_id" id="mensajeEnvioId" value="">
+                <button type="submit" class="btn-primary" style="width: auto; margin: 0;">Enviar rectificación</button>
+            </form>
+            <button class="btn-secondary" onclick="closeModal('mensajeModal')">Cerrar</button>
         </div>
     </div>
 </div>
@@ -293,11 +365,48 @@ function escHtml(valor) {
     return String(valor ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
 }
 
+// Vista previa: pide al servidor el texto EXACTO (sin enviar nada). tipo = 'mensaje' | 'rectificacion'.
+async function verMensaje(id, tipo) {
+    const titulo = document.getElementById('mensajeTitulo');
+    const aviso  = document.getElementById('mensajeAviso');
+    const meta   = document.getElementById('mensajeMeta');
+    const texto  = document.getElementById('mensajeTexto');
+    const form   = document.getElementById('mensajeFormRect');
+
+    titulo.textContent = tipo === 'rectificacion' ? 'Rectificación que recibirá el tutor' : 'Mensaje que recibirá el tutor';
+    texto.textContent = 'Cargando...';
+    meta.textContent = '';
+    aviso.style.display = 'none';
+    form.style.display = 'none';
+    openModal('mensajeModal');
+
+    try {
+        const resp = await fetch('/edunexo/admin/envios-wa/vista-previa?id=' + encodeURIComponent(id) + '&tipo=' + encodeURIComponent(tipo), { credentials: 'same-origin' });
+        const data = await resp.json();
+        if (!data.ok) {
+            texto.textContent = data.error || 'No se pudo armar el mensaje.';
+            return;
+        }
+        meta.textContent = 'Para: ' + data.estudiante + ' → ' + data.destinatario;
+        texto.textContent = data.mensaje;
+        if (data.texto_libre) {
+            aviso.textContent = 'Este mensaje incluye texto escrito por docentes (incidentes u observaciones) que llega tal cual al tutor. Revisalo antes de enviar.';
+            aviso.style.display = 'block';
+        }
+        if (tipo === 'rectificacion') {
+            document.getElementById('mensajeEnvioId').value = id;
+            form.style.display = 'block';
+        }
+    } catch (e) {
+        texto.textContent = 'No se pudo cargar la vista previa. Recargá la página e intentá de nuevo.';
+    }
+}
+
 function verDetalle(estudiante, tutor, semana, reportesJson) {
     [estudiante, tutor, semana] = [estudiante, tutor, semana].map(escHtml);
     let reportes = [];
     try { reportes = JSON.parse(reportesJson) || []; } catch (e) { reportes = []; }
-    const ausencias = reportes.length ? (reportes[0].dias_ausente ?? 0) : 0;
+    const ausencias = reportes.length ? (reportes[0].dias_ausente ?? 0) : null;
 
     const bloquesDocentes = reportes.map(r => {
         const docente = escHtml(r.docente_nombre || 'Docente');
@@ -338,13 +447,13 @@ function verDetalle(estudiante, tutor, semana, reportesJson) {
                 <strong style="color: #a5b4fc;">${semana}</strong>
             </div>
             <div>
-                <span style="color: var(--text-muted); display: block; font-size: 0.8rem;">Días ausente (la semana, no cambia por docente)</span>
-                <span style="color: var(--text-primary);">${ausencias} día(s)</span>
+                <span style="color: var(--text-muted); display: block; font-size: 0.8rem;">Días con alguna falta sin justificar (el mensaje detalla las faltas por materia)</span>
+                <span style="color: var(--text-primary);">${ausencias === null ? '—' : ausencias + ' día(s)'}</span>
             </div>
         </div>
 
-        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 0.5rem;">Este es el mensaje que recibe el tutor: incluye el aporte de ${reportes.length} docente(s).</div>
-        ${bloquesDocentes || '<div style="color: var(--text-muted);">No hay reportes cargados para esta semana.</div>'}
+        <div style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 0.5rem;">Reportes de los docentes que entran en el mensaje (${reportes.length}). El texto exacto está en el botón de vista previa.</div>
+        ${bloquesDocentes || '<div style="color: var(--text-muted);">Ningún docente cargó reporte esta semana. El mensaje se arma solo con la asistencia y las notas cargadas.</div>'}
     `;
     openModal('detalleModal');
 }

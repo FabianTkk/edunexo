@@ -184,6 +184,12 @@ switch ($url) {
         (new \App\Controllers\AdminEnviosWaController())->procesarPendientes(); break;
     case 'admin/envios-wa/test-directo':
         (new \App\Controllers\AdminEnviosWaController())->testDirecto(); break;
+    case 'admin/envios-wa/vista-previa':
+        (new \App\Controllers\AdminEnviosWaController())->vistaPrevia(); break;
+    case 'admin/envios-wa/retener':
+        (new \App\Controllers\AdminEnviosWaController())->retener(); break;
+    case 'admin/envios-wa/rectificar':
+        (new \App\Controllers\AdminEnviosWaController())->rectificar(); break;
 
     // ── Admin Logs ────────────────────────────────────────────────────────
     case 'admin/logs':

@@ -17,17 +17,11 @@ class AdminEnviosWaController {
     public function index() {
         $db = Database::getConnection();
 
-        // 1. Auto-sincronizar reportes existentes que aún no estén encolados en envios_wa.
-        // Se agrupa por estudiante+semana+tutor: si ya hay un envio para esa combinacion (creado
-        // por el propio docente al guardar su reporte, o por otro docente antes), no se duplica.
+        // 1. Auto-sincronizar: encola lo que todavia no este en envios_wa (reportes de docentes y
+        // estudiantes con asistencia o notas de la semana sin reporte). Ver CronController::sincronizarEnvios.
+        // Se agrupa por estudiante+semana+tutor, asi que no se duplica nada ya encolado.
         try {
-            $db->exec("
-                INSERT IGNORE INTO envios_wa (reporte_id, estudiante_id, periodo_semana, destinatario_telefono, estado, fecha_hora_envio)
-                SELECT r.id, r.estudiante_id, DATE_SUB(r.periodo_semana, INTERVAL WEEKDAY(r.periodo_semana) DAY), t.telefono, 'pendiente', NULL
-                FROM reportes r
-                JOIN tutores_estudiantes te ON te.estudiante_id = r.estudiante_id
-                JOIN tutores t ON t.id = te.tutor_id AND t.activo = 1
-            ");
+            CronController::sincronizarEnvios(CronController::semanaObjetivo());
         } catch (\Throwable $e) {
             error_log("[AdminEnviosWaController] Error en sincronización automática: " . $e->getMessage());
         }
@@ -81,7 +75,19 @@ class AdminEnviosWaController {
                         WHERE r2.estudiante_id = ew.estudiante_id
                         AND DATE_SUB(r2.periodo_semana, INTERVAL WEEKDAY(r2.periodo_semana) DAY) = ew.periodo_semana) AS docentes,
                    (SELECT MIN(r2.created_at) FROM reportes r2 WHERE r2.estudiante_id = ew.estudiante_id
-                        AND DATE_SUB(r2.periodo_semana, INTERVAL WEEKDAY(r2.periodo_semana) DAY) = ew.periodo_semana) AS fecha_creacion_reporte
+                        AND DATE_SUB(r2.periodo_semana, INTERVAL WEEKDAY(r2.periodo_semana) DAY) = ew.periodo_semana) AS fecha_creacion_reporte,
+                   -- Texto escrito por docentes que sale tal cual al tutor (incidentes u observaciones): conviene revisarlo.
+                   (EXISTS (SELECT 1 FROM reportes r3 WHERE r3.estudiante_id = ew.estudiante_id
+                        AND DATE_SUB(r3.periodo_semana, INTERVAL WEEKDAY(r3.periodo_semana) DAY) = ew.periodo_semana
+                        AND r3.incidentes_disciplinarios IS NOT NULL AND r3.incidentes_disciplinarios <> '')
+                    OR EXISTS (SELECT 1 FROM notas n3 WHERE n3.estudiante_id = ew.estudiante_id
+                        AND n3.updated_at >= ew.periodo_semana AND n3.updated_at < DATE_ADD(ew.periodo_semana, INTERVAL 7 DAY)
+                        AND n3.observacion IS NOT NULL AND n3.observacion <> '')) AS tiene_texto_libre,
+                   -- Mensaje ya enviado y despues se creo o edito un reporte de esa semana: ofrece rectificacion.
+                   (ew.estado IN ('enviado','entregado') AND ew.fecha_hora_envio IS NOT NULL
+                    AND EXISTS (SELECT 1 FROM reportes r4 WHERE r4.estudiante_id = ew.estudiante_id
+                        AND DATE_SUB(r4.periodo_semana, INTERVAL WEEKDAY(r4.periodo_semana) DAY) = ew.periodo_semana
+                        AND r4.updated_at > ew.fecha_hora_envio)) AS editado_tras_envio
             FROM envios_wa ew
             JOIN estudiantes e ON e.id = ew.estudiante_id
             LEFT JOIN tutores t ON t.telefono = ew.destinatario_telefono
@@ -122,7 +128,8 @@ class AdminEnviosWaController {
         unset($ev);
 
         // 4. Contadores para métricas y botón de procesar
-        $conteoPendientes = (int)$db->query("SELECT COUNT(*) FROM envios_wa WHERE estado = 'pendiente'")->fetchColumn();
+        $conteoPendientes = (int)$db->query("SELECT COUNT(*) FROM envios_wa WHERE estado = 'pendiente' AND retenido = 0")->fetchColumn();
+        $conteoRetenidos  = (int)$db->query("SELECT COUNT(*) FROM envios_wa WHERE estado = 'pendiente' AND retenido = 1")->fetchColumn();
         $conteoErrores    = (int)$db->query("SELECT COUNT(*) FROM envios_wa WHERE estado = 'error'")->fetchColumn();
 
         // 5. Estado en vivo del microservicio Evolution API
@@ -176,7 +183,7 @@ class AdminEnviosWaController {
         }
 
         $db = Database::getConnection();
-        $stmt = $db->query("SELECT id FROM envios_wa WHERE estado = 'pendiente'");
+        $stmt = $db->query("SELECT id FROM envios_wa WHERE estado = 'pendiente' AND retenido = 0");
         $pendientes = $stmt->fetchAll(\PDO::FETCH_COLUMN);
 
         if (empty($pendientes)) {
@@ -234,6 +241,86 @@ class AdminEnviosWaController {
         } else {
             $errorMsg = $debugInfo['response'] ?? $debugInfo['curl_error'] ?? 'El servidor de Evolution API rechazó la solicitud.';
             $_SESSION['error'] = "Fallo al enviar mensaje de prueba a {$telefono}: {$errorMsg}";
+        }
+
+        header('Location: /edunexo/admin/envios-wa');
+        exit;
+    }
+
+    /**
+     * Vista previa: devuelve el texto EXACTO que recibira el tutor (o el de la rectificacion) sin enviar ni
+     * escribir nada. GET ?id=<envio>&tipo=mensaje|rectificacion
+     */
+    public function vistaPrevia() {
+        $envioId = (int)($_GET['id'] ?? 0);
+        $tipo = (($_GET['tipo'] ?? '') === 'rectificacion') ? 'rectificacion' : 'mensaje';
+        $r = ($tipo === 'rectificacion')
+            ? CronController::construirRectificacion($envioId)
+            : CronController::construirMensaje($envioId);
+
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode([
+            'ok'          => !empty($r['success']),
+            'tipo'        => $tipo,
+            'mensaje'     => $r['mensaje'] ?? '',
+            'error'       => $r['error'] ?? null,
+            'estudiante'  => $r['estudiante'] ?? '',
+            'destinatario' => $r['destinatario'] ?? '',
+            'texto_libre' => !empty($r['tiene_texto_libre']),
+        ], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+
+    /**
+     * Retiene o libera un envio pendiente. Un envio retenido no sale en el envio automatico del viernes ni en
+     * "Procesar pendientes"; sigue pudiendo enviarse a mano con su boton "Enviar".
+     */
+    public function retener() {
+        if (!SecurityHelper::validateCsrfToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token CSRF inválido.';
+            header('Location: /edunexo/admin/envios-wa');
+            exit;
+        }
+
+        $envioId = (int)($_POST['envio_id'] ?? 0);
+        $retener = (($_POST['accion'] ?? '') === 'liberar') ? 0 : 1;
+
+        $stmt = Database::getConnection()->prepare("UPDATE envios_wa SET retenido = ? WHERE id = ? AND estado = 'pendiente'");
+        $stmt->execute([$retener, $envioId]);
+
+        if ($stmt->rowCount()) {
+            $_SESSION['success'] = $retener
+                ? 'Envío retenido: no saldrá en el envío automático hasta que lo liberes.'
+                : 'Envío liberado: saldrá en el próximo envío automático.';
+        } else {
+            $_SESSION['error'] = 'Sin cambios: el envío ya estaba en ese estado, ya salió o no existe.';
+        }
+
+        header('Location: /edunexo/admin/envios-wa');
+        exit;
+    }
+
+    /**
+     * Envia la rectificacion corta de un mensaje ya enviado (reportes nuevos o editados despues del envio).
+     */
+    public function rectificar() {
+        if (!SecurityHelper::validateCsrfToken($_POST['csrf_token'] ?? '')) {
+            $_SESSION['error'] = 'Token CSRF inválido.';
+            header('Location: /edunexo/admin/envios-wa');
+            exit;
+        }
+
+        $envioId = (int)($_POST['envio_id'] ?? 0);
+        $resultado = CronController::enviarRectificacion($envioId);
+
+        if ($resultado['success']) {
+            $_SESSION['success'] = "Rectificación enviada a {$resultado['destinatario']} ({$resultado['estudiante']}).";
+        } else {
+            $detallesError = $resultado['error'] ?? 'Error desconocido';
+            if (!empty($resultado['debug']['curl_error'])) {
+                $detallesError .= ' (' . $resultado['debug']['curl_error'] . ')';
+            }
+            $_SESSION['error'] = "No se pudo enviar la rectificación: {$detallesError}";
         }
 
         header('Location: /edunexo/admin/envios-wa');

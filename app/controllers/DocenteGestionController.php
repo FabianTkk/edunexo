@@ -47,9 +47,12 @@ class DocenteGestionController {
 
     /**
      * Encola (o re-encola) el envio de WhatsApp agrupado por estudiante+semana+tutor.
-     * Un solo envio reune los reportes de TODOS los docentes de esa semana: si ya habia uno
-     * para ese estudiante y esa semana, se reactiva (vuelve a 'pendiente') para que el proximo
-     * envio incluya el reporte nuevo o editado; no crea un mensaje aparte por cada docente.
+     * Un solo envio reune los reportes de TODOS los docentes de esa semana. Si ya habia uno para ese
+     * estudiante y esa semana:
+     *   - pendiente o con error: se deja/vuelve a 'pendiente' y el mensaje incluira el reporte nuevo o editado;
+     *   - YA ENVIADO: NO se reenvia. Se conserva como 'enviado' y el panel admin avisa "reporte editado tras el
+     *     envio" para que la administracion decida si manda una rectificacion corta (reportes.updated_at
+     *     contra envios_wa.fecha_hora_envio). Asi el tutor no recibe el mensaje completo dos veces.
      * Devuelve la cantidad de tutores activos a los que se les encolo el envio (0 si no tiene).
      */
     private function sincronizarEnvioWhatsApp($db, int $reporteId, int $estudianteId, string $lunes): int {
@@ -61,12 +64,21 @@ class DocenteGestionController {
         $upsert = $db->prepare(
             "INSERT INTO envios_wa (reporte_id, estudiante_id, periodo_semana, destinatario_telefono, estado, fecha_hora_envio)
              VALUES (?, ?, ?, ?, 'pendiente', NULL)
-             ON DUPLICATE KEY UPDATE reporte_id = VALUES(reporte_id), estado = 'pendiente', fecha_hora_envio = NULL"
+             ON DUPLICATE KEY UPDATE reporte_id = VALUES(reporte_id),
+                 fecha_hora_envio = IF(estado IN ('enviado','entregado'), fecha_hora_envio, NULL),
+                 estado = IF(estado IN ('enviado','entregado'), estado, 'pendiente')"
         );
         foreach ($telefonos as $telefono) {
             $upsert->execute([$reporteId, $estudianteId, $lunes, $telefono]);
         }
         return count($telefonos);
+    }
+
+    /** True si el mensaje semanal de ese estudiante ya salio (a algun tutor): ahi un cambio no se reenvia solo. */
+    private function envioYaEnviado($db, int $estudianteId, string $lunes): bool {
+        $stmt = $db->prepare("SELECT COUNT(*) FROM envios_wa WHERE estudiante_id = ? AND periodo_semana = ? AND estado IN ('enviado','entregado')");
+        $stmt->execute([$estudianteId, $lunes]);
+        return (int)$stmt->fetchColumn() > 0;
     }
 
     public function estudiantes(): void {
@@ -195,8 +207,11 @@ class DocenteGestionController {
         $contarOtros->execute([$estId, $fecha]);
         $otrosReportes = (int)$contarOtros->fetchColumn() - 1;
         $tutoresEncolados = $this->sincronizarEnvioWhatsApp($db, $nuevoReporteId, $estId, $fecha);
+        $yaEnviado = $this->envioYaEnviado($db, $estId, $fecha);
         if ($tutoresEncolados === 0) {
             $_SESSION['success'] = 'Reporte creado, pero el estudiante no tiene un tutor activo registrado: no se preparó ningún envío de WhatsApp.';
+        } elseif ($yaEnviado) {
+            $_SESSION['success'] = 'Reporte creado. El mensaje de esta semana ya se envió a los tutores y no se reenvía solo: la administración puede mandarles una rectificación corta.';
         } elseif ($otrosReportes > 0) {
             $_SESSION['success'] = "Reporte creado y sumado al envío de WhatsApp de esta semana, junto con el de {$otrosReportes} docente(s) más.";
         } else {
@@ -222,7 +237,9 @@ class DocenteGestionController {
             // El reporte cambio (o cambio de semana/estudiante): se re-encola el envio agrupado
             // de la semana que corresponda ahora, para que el proximo mensaje lleve lo nuevo.
             $this->sincronizarEnvioWhatsApp($db, $id, $estId, $fecha);
-            $_SESSION['success'] = 'Reporte actualizado.';
+            $_SESSION['success'] = $this->envioYaEnviado($db, $estId, $fecha)
+                ? 'Reporte actualizado. El mensaje de esta semana ya se envió a los tutores y no se reenvía solo: la administración puede mandarles una rectificación corta.'
+                : 'Reporte actualizado.';
         } else {
             $_SESSION['error'] = 'El plazo de 48 horas venció o el reporte no existe.';
         }

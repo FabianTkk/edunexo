@@ -29,6 +29,11 @@ desktop.ini
 *.log
 logs/
 
+# Respaldos de la base (traen datos reales: nombres, CI, telefonos, hashes)
+backup_*.sql
+*_backup.sql
+*.bak
+
 # Cache
 *.cache
 cache/

@@ -133,6 +133,18 @@ La URL, la instancia y la API key se leen del archivo `.env` (ver `.env.example`
 
 > El `.env` esta excluido del repositorio. Nunca subas una API key al codigo.
 
+## Envio semanal automatico
+
+Los reportes salen solos los viernes mediante el Programador de tareas de Windows (un evento de MySQL no puede llamar a PHP).
+Crear la tarea una sola vez, desde una terminal (cmd) normal:
+
+```bash
+schtasks /create /tn "EduNexo envios semanales" /tr "C:\laragon\www\edunexo\cron\enviar_semanal.bat" /sc weekly /d FRI /st 18:00
+```
+
+Para probar sin enviar nada: `cron\enviar_semanal.bat --solo-encolar`. El resultado de cada corrida queda en `logs/envios_semanales.log`.
+Requiere la PC encendida, Laragon y Evolution API corriendo a esa hora. Mas detalle en `edunexo_sistema.md`.
+
 ---
 
 ## Notas de seguridad
